@@ -1,0 +1,30 @@
+{
+	"schemaVersion": 1,
+	"id": "mini-macros",
+	"version": "${version}",
+	"name": "Mini Macros",
+	"description": "Build client-side macros out of drag-and-drop blocks, Scratch style, and bind them to a key.",
+	"authors": [
+		"Ball534"
+	],
+	"license": "GPL-3.0-only",
+	"icon": "assets/mini-macros/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"com.minimacros.MiniMacrosClient"
+		],
+		"modmenu": [
+			"com.minimacros.MiniMacrosModMenu"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	},
+	"recommends": {
+		"modmenu": "*"
+	}
+}

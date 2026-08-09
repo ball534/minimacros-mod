@@ -1,0 +1,349 @@
+package com.minimacros.gui;
+
+import com.minimacros.macro.BlockInstance;
+import com.minimacros.macro.BlockType;
+import com.minimacros.macro.ParamSpec;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Draws laid-out blocks. Coordinates are whatever the caller has translated
+ * into, so the same code renders the canvas, the palette and the drag ghost.
+ */
+public final class BlockRenderer {
+
+	/** Shown in a key slot while it waits for the player to press something. */
+	public static final String KEY_PROMPT = "press a key";
+
+	/**
+	 * Which param, if any, currently has an open inline editor. A null
+	 * {@link #field} means the param is capturing a keypress instead of text.
+	 */
+	public record EditTarget(BlockInstance block, String paramId, InlineTextField field) {
+		boolean matches(BlockInstance candidate, ParamSpec spec) {
+			return candidate == block && spec.id().equals(paramId);
+		}
+
+		boolean capturing() {
+			return field == null;
+		}
+	}
+
+	private BlockRenderer() {
+	}
+
+	public static void drawStack(GuiGraphicsExtractor graphics, Font font, List<BlockLayout.Node> nodes,
+			BlockLayout.Node hovered, EditTarget edit) {
+		for (BlockLayout.Node node : nodes) {
+			draw(graphics, font, node, hovered, edit);
+		}
+	}
+
+	public static void draw(GuiGraphicsExtractor graphics, Font font, BlockLayout.Node node,
+			BlockLayout.Node hovered, EditTarget edit) {
+		BlockType type = node.block.type();
+		if (type == null) {
+			drawUnknown(graphics, font, node);
+			return;
+		}
+
+		int color = type.category().color();
+		int border = Theme.BLOCK_BORDER;
+
+		if (type.isBoolean()) {
+			drawHexagon(graphics, node.x, node.y, node.x + node.headerWidth,
+					node.y + node.headerHeight, color, border);
+		} else if (type.isReporter()) {
+			drawOval(graphics, node.x, node.y, node.x + node.headerWidth,
+					node.y + node.headerHeight, color, border);
+		} else {
+			// A C-block is one shape, so its header, arms, dividers and foot are
+			// outlined together — outlining each piece drew a line across every
+			// join and made the parts look like separate blocks.
+			if (node.branches.isEmpty()) {
+				fillPanel(graphics, node.x, node.y, node.x + node.headerWidth,
+						node.y + node.headerHeight, color, border);
+			} else {
+				drawContainer(graphics, node, color, border);
+			}
+
+			// The groove along the top edge that makes stacked blocks read as joined.
+			graphics.fill(node.x + BlockLayout.NOTCH_X, node.y,
+					node.x + BlockLayout.NOTCH_X + BlockLayout.NOTCH_WIDTH,
+					node.y + BlockLayout.NOTCH_HEIGHT, border);
+		}
+
+		for (int i = 0; i < node.dividerYs.size(); i++) {
+			String label = type.branchLabel(i + 1);
+			if (!label.isEmpty()) {
+				int dividerY = node.dividerYs.get(i);
+				graphics.text(font, label, node.x + BlockLayout.PAD_X,
+						BlockLayout.textTop(dividerY, BlockLayout.DIVIDER_HEIGHT, font),
+						Theme.TEXT_ON_BLOCK);
+			}
+		}
+
+		if (node == hovered) {
+			outlineShape(graphics, node, type, Theme.BLOCK_HOVER);
+		}
+
+		for (BlockLayout.TextPart part : node.textParts) {
+			graphics.text(font, part.text(), part.x(), part.y(), Theme.TEXT_ON_BLOCK);
+		}
+		for (BlockLayout.ParamBox param : node.params) {
+			if (param.nested != null) {
+				draw(graphics, font, param.nested, hovered, edit);
+			} else {
+				drawParam(graphics, font, node.block, param, edit);
+			}
+		}
+
+		for (BlockLayout.Branch branch : node.branches) {
+			drawStack(graphics, font, branch.children(), hovered, edit);
+		}
+	}
+
+	private static void drawParam(GuiGraphicsExtractor graphics, Font font, BlockInstance block,
+			BlockLayout.ParamBox param, EditTarget edit) {
+		int x = param.x;
+		int y = param.y;
+		int right = x + param.width;
+		int bottom = y + param.height;
+
+		boolean editing = edit != null && edit.matches(block, param.spec);
+		boolean slot = param.acceptsBlock();
+
+		if (param.spec.acceptsOnlyBoolean()) {
+			// Same fill as every other empty slot — only the shape says what fits.
+			drawHexagon(graphics, x, y, right, bottom, Theme.PARAM_FILL, Theme.PARAM_FILL);
+			return;
+		}
+		if (slot) {
+			drawOval(graphics, x, y, right, bottom, Theme.PARAM_FILL, Theme.PARAM_FILL);
+		} else {
+			graphics.fill(x, y, right, bottom, Theme.PARAM_FILL);
+		}
+		if (editing) {
+			graphics.outline(x, y, param.width, param.height, Theme.PARAM_FOCUSED);
+		}
+
+		boolean capturing = editing && edit.capturing();
+		boolean dropdown = param.spec.kind() == ParamSpec.Kind.DROPDOWN;
+		String text = editing
+				? (capturing ? KEY_PROMPT : edit.field().value())
+				: block.arg(param.spec.id());
+
+		// Same inset as the label text uses, on the same line — the field is
+		// measured to this padding, so the text sits centred in it.
+		int textX = x + BlockLayout.PARAM_PAD_X;
+		int textY = BlockLayout.textTop(y, param.height, font);
+		int available = param.width - BlockLayout.PARAM_PAD_X * 2
+				- (dropdown ? BlockLayout.DROPDOWN_ARROW_WIDTH : 0);
+		String shown = font.plainSubstrByWidth(text, available);
+
+		graphics.text(font, shown, textX, textY, capturing ? Theme.TEXT_MUTED : Theme.PARAM_TEXT);
+
+		if (editing && !capturing && edit.field().caretVisible()) {
+			String beforeCaret = text.substring(0, Math.min(edit.field().cursor(), text.length()));
+			int caretX = Math.min(textX + font.width(beforeCaret), right - 2);
+			graphics.fill(caretX, y + 2, caretX + 1, bottom - 2, Theme.PARAM_TEXT);
+		}
+
+		if (dropdown) {
+			int arrowSlot = right - BlockLayout.PARAM_PAD_X - BlockLayout.DROPDOWN_ARROW_WIDTH;
+			graphics.text(font, "v",
+					arrowSlot + (BlockLayout.DROPDOWN_ARROW_WIDTH - font.width("v")) / 2,
+					textY, Theme.PARAM_TEXT);
+		}
+	}
+
+	private static void drawUnknown(GuiGraphicsExtractor graphics, Font font, BlockLayout.Node node) {
+		fillPanel(graphics, node.x, node.y, node.x + node.headerWidth,
+				node.y + node.headerHeight, 0xFF555560, 0xFF33333A);
+		graphics.text(font, "unknown block: " + node.block.typeId(), node.x + BlockLayout.PAD_X,
+				BlockLayout.textTop(node.y, node.headerHeight, font), Theme.TEXT_MUTED);
+	}
+
+	private static void fillPanel(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
+			int fill, int border) {
+		graphics.fill(x1, y1, x2, y2, fill);
+		graphics.outline(x1, y1, x2 - x1, y2 - y1, border);
+	}
+
+	/**
+	 * Traces the block's own silhouette in {@code color}, on top of whatever has
+	 * already been drawn.
+	 *
+	 * <p>Used for the hover highlight. That used to be a plain rectangle around the
+	 * header, which on a C-block closed a line straight across the mouth and left
+	 * the arm and the foot unmarked — the highlight outlined a block that wasn't
+	 * the shape on screen.
+	 */
+	private static void outlineShape(GuiGraphicsExtractor graphics, BlockLayout.Node node,
+			BlockType type, int color) {
+		int right = node.x + node.headerWidth;
+		int bottom = node.y + node.headerHeight;
+
+		if (type.isBoolean()) {
+			outlineHexagon(graphics, node.x, node.y, right, bottom, color);
+		} else if (type.isReporter()) {
+			outlineOval(graphics, node.x, node.y, right, bottom, color);
+		} else if (node.branches.isEmpty()) {
+			graphics.outline(node.x, node.y, node.headerWidth, node.headerHeight, color);
+		} else {
+			outlineContainer(graphics, node.x, bands(node), color);
+		}
+	}
+
+	/**
+	 * Draws a C-block as one outlined shape.
+	 *
+	 * <p>Filling every band first and only then tracing the outside means no line
+	 * is ever drawn across a join, so the whole thing reads as one block with a
+	 * single border around it.
+	 */
+	private static void drawContainer(GuiGraphicsExtractor graphics, BlockLayout.Node node,
+			int fill, int border) {
+		List<int[]> bands = bands(node);
+		for (int[] band : bands) {
+			graphics.fill(node.x, band[0], band[2], band[1], fill);
+		}
+		outlineContainer(graphics, node.x, bands, border);
+	}
+
+	/**
+	 * The C-block silhouette, as a run of bands stacked from the header down to the
+	 * foot. All are flush against the same left edge and differ only in how far
+	 * right they reach — full width for the header, dividers and foot, and just the
+	 * arm's width beside each branch. Each entry is {@code {top, bottom, right}}.
+	 */
+	private static List<int[]> bands(BlockLayout.Node node) {
+		int fullRight = node.x + node.headerWidth;
+		int armRight = node.x + BlockLayout.BRANCH_INDENT;
+
+		List<int[]> bands = new ArrayList<>();
+		bands.add(new int[]{node.y, node.y + node.headerHeight, fullRight});
+		for (int i = 0; i < node.branches.size(); i++) {
+			BlockLayout.Branch branch = node.branches.get(i);
+			bands.add(new int[]{branch.y(), branch.y() + branch.height(), armRight});
+			if (i < node.dividerYs.size()) {
+				int dividerY = node.dividerYs.get(i);
+				bands.add(new int[]{dividerY, dividerY + BlockLayout.DIVIDER_HEIGHT, fullRight});
+			}
+		}
+		bands.add(new int[]{node.footerY, node.footerY + BlockLayout.FOOTER_HEIGHT, fullRight});
+		return bands;
+	}
+
+	private static void outlineContainer(GuiGraphicsExtractor graphics, int left, List<int[]> bands,
+			int border) {
+		int[] first = bands.getFirst();
+		int[] last = bands.getLast();
+
+		// The left edge runs the whole height uninterrupted; every band contributes
+		// its own right edge, and the top and bottom cap the ends.
+		graphics.fill(left, first[0], left + 1, last[1], border);
+		graphics.fill(left, first[0], first[2], first[0] + 1, border);
+		graphics.fill(left, last[1] - 1, last[2], last[1], border);
+		for (int[] band : bands) {
+			graphics.fill(band[2] - 1, band[0], band[2], band[1], border);
+		}
+
+		// Where one band is wider than the next, the overhang's edge is exposed:
+		// along the bottom of the wider band, or the top of the wider one below.
+		for (int i = 0; i + 1 < bands.size(); i++) {
+			int above = bands.get(i)[2];
+			int below = bands.get(i + 1)[2];
+			int boundary = bands.get(i)[1];
+			if (above > below) {
+				graphics.fill(below - 1, boundary - 1, above, boundary, border);
+			} else if (below > above) {
+				graphics.fill(above - 1, boundary, below, boundary + 1, border);
+			}
+		}
+	}
+
+	/**
+	 * The pointed shape that marks a condition: boolean blocks and the holes they
+	 * drop into. Each row is inset by its distance from the middle, which gives
+	 * flat top and bottom edges and a point at each end.
+	 */
+	private static void drawHexagon(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
+			int fill, int border) {
+		int height = y2 - y1;
+		if (height <= 0) {
+			return;
+		}
+		double middle = (height - 1) / 2.0;
+
+		for (int row = 0; row < height; row++) {
+			int inset = (int) Math.round(Math.abs(row - middle));
+			int left = Math.min(x1 + inset, x2);
+			int right = Math.max(x2 - inset, left);
+			graphics.fill(left, y1 + row, right, y1 + row + 1, fill);
+		}
+
+		if (border != fill) {
+			outlineHexagon(graphics, x1, y1, x2, y2, border);
+		}
+	}
+
+	private static void outlineHexagon(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
+			int border) {
+		int height = y2 - y1;
+		if (height <= 0) {
+			return;
+		}
+		double middle = (height - 1) / 2.0;
+
+		for (int row = 0; row < height; row++) {
+			int inset = (int) Math.round(Math.abs(row - middle));
+			int left = Math.min(x1 + inset, x2);
+			int right = Math.max(x2 - inset, left);
+			graphics.fill(left, y1 + row, left + 1, y1 + row + 1, border);
+			graphics.fill(right - 1, y1 + row, right, y1 + row + 1, border);
+		}
+
+		int cap = (int) Math.round(middle);
+		graphics.fill(x1 + cap, y1, x2 - cap, y1 + 1, border);
+		graphics.fill(x1 + cap, y2 - 1, x2 - cap, y2, border);
+	}
+
+	/**
+	 * The rounded shape that marks a value: reporters and the slots they drop
+	 * into. Stepping the ends in by a pixel per row is enough to read as an oval
+	 * at GUI scale without any texture work.
+	 */
+	private static void drawOval(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
+			int fill, int border) {
+		int inset = ovalInset(y2 - y1);
+
+		graphics.fill(x1 + inset, y1, x2 - inset, y2, fill);
+		for (int i = 0; i < inset; i++) {
+			int trim = inset - i;
+			graphics.fill(x1 + i, y1 + trim, x1 + i + 1, y2 - trim, fill);
+			graphics.fill(x2 - i - 1, y1 + trim, x2 - i, y2 - trim, fill);
+		}
+
+		if (border != fill) {
+			outlineOval(graphics, x1, y1, x2, y2, border);
+		}
+	}
+
+	private static void outlineOval(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
+			int border) {
+		int inset = ovalInset(y2 - y1);
+		graphics.fill(x1 + inset, y1, x2 - inset, y1 + 1, border);
+		graphics.fill(x1 + inset, y2 - 1, x2 - inset, y2, border);
+		graphics.fill(x1, y1 + inset, x1 + 1, y2 - inset, border);
+		graphics.fill(x2 - 1, y1 + inset, x2, y2 - inset, border);
+	}
+
+	/** How far each end steps in per row — shared so fill and outline agree. */
+	private static int ovalInset(int height) {
+		return Math.min(3, Math.max(1, height / 4));
+	}
+}
