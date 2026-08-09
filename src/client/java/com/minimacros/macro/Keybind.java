@@ -45,21 +45,25 @@ public final class Keybind {
 	}
 
 	/**
-	 * True when exactly this combination is down — every required modifier held
-	 * and no others. Without the "no others" half, a bare "L" binding would also
-	 * fire while the player holds shift to sprint.
+	 * True when this binding's key is down along with every modifier it names.
+	 *
+	 * <p>Modifiers it does not name are ignored, which is what lets a plain "R"
+	 * fire while ctrl is held to sprint, shift to sneak, or alt for anything else
+	 * — those are keys a player is holding to play the game, not part of what they
+	 * pressed. Demanding that no other modifier be down made a macro simply stop
+	 * working while sprinting.
+	 *
+	 * <p>The trade is that "R" and "Ctrl + R" on two macros both fire on ctrl+R. A
+	 * binding that wants ctrl to mean something different has to say so on both
+	 * sides.
 	 */
 	public static boolean isCombinationDown(Window window, int keyCode, List<Integer> modifiers) {
 		if (keyCode == InputConstants.UNKNOWN.getValue()
 				|| !InputConstants.isKeyDown(window, keyCode)) {
 			return false;
 		}
-		for (int modifier : MODIFIER_KEYS) {
-			if (modifier == keyCode) {
-				continue;
-			}
-			boolean required = modifiers.contains(modifier);
-			if (required != InputConstants.isKeyDown(window, modifier)) {
+		for (int modifier : modifiers) {
+			if (modifier != keyCode && !InputConstants.isKeyDown(window, modifier)) {
 				return false;
 			}
 		}

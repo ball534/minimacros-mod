@@ -131,7 +131,6 @@ public final class BlockRenderer {
 		}
 
 		boolean capturing = editing && edit.capturing();
-		boolean dropdown = param.spec.kind() == ParamSpec.Kind.DROPDOWN;
 		String text = editing
 				? (capturing ? KEY_PROMPT : edit.field().value())
 				: block.arg(param.spec.id());
@@ -140,8 +139,7 @@ public final class BlockRenderer {
 		// measured to this padding, so the text sits centred in it.
 		int textX = x + BlockLayout.PARAM_PAD_X;
 		int textY = BlockLayout.textTop(y, param.height, font);
-		int available = param.width - BlockLayout.PARAM_PAD_X * 2
-				- (dropdown ? BlockLayout.DROPDOWN_ARROW_WIDTH : 0);
+		int available = param.width - BlockLayout.PARAM_PAD_X * 2;
 		String shown = font.plainSubstrByWidth(text, available);
 
 		graphics.text(font, shown, textX, textY, capturing ? Theme.TEXT_MUTED : Theme.PARAM_TEXT);
@@ -150,13 +148,6 @@ public final class BlockRenderer {
 			String beforeCaret = text.substring(0, Math.min(edit.field().cursor(), text.length()));
 			int caretX = Math.min(textX + font.width(beforeCaret), right - 2);
 			graphics.fill(caretX, y + 2, caretX + 1, bottom - 2, Theme.PARAM_TEXT);
-		}
-
-		if (dropdown) {
-			int arrowSlot = right - BlockLayout.PARAM_PAD_X - BlockLayout.DROPDOWN_ARROW_WIDTH;
-			graphics.text(font, "v",
-					arrowSlot + (BlockLayout.DROPDOWN_ARROW_WIDTH - font.width("v")) / 2,
-					textY, Theme.PARAM_TEXT);
 		}
 	}
 
@@ -314,18 +305,21 @@ public final class BlockRenderer {
 
 	/**
 	 * The rounded shape that marks a value: reporters and the slots they drop
-	 * into. Stepping the ends in by a pixel per row is enough to read as an oval
-	 * at GUI scale without any texture work.
+	 * into. Drawn a row at a time, as the hexagon is, because the ends follow an
+	 * arc rather than a straight taper — a taper steep enough to read as properly
+	 * round ends in a point, and a point is what a hexagon uses to say it is a
+	 * condition.
 	 */
 	private static void drawOval(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
 			int fill, int border) {
-		int inset = ovalInset(y2 - y1);
+		int height = y2 - y1;
+		if (height <= 0) {
+			return;
+		}
 
-		graphics.fill(x1 + inset, y1, x2 - inset, y2, fill);
-		for (int i = 0; i < inset; i++) {
-			int trim = inset - i;
-			graphics.fill(x1 + i, y1 + trim, x1 + i + 1, y2 - trim, fill);
-			graphics.fill(x2 - i - 1, y1 + trim, x2 - i, y2 - trim, fill);
+		for (int row = 0; row < height; row++) {
+			int inset = ovalInset(height, x2 - x1, row);
+			graphics.fill(x1 + inset, y1 + row, x2 - inset, y1 + row + 1, fill);
 		}
 
 		if (border != fill) {
@@ -335,15 +329,42 @@ public final class BlockRenderer {
 
 	private static void outlineOval(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
 			int border) {
-		int inset = ovalInset(y2 - y1);
-		graphics.fill(x1 + inset, y1, x2 - inset, y1 + 1, border);
-		graphics.fill(x1 + inset, y2 - 1, x2 - inset, y2, border);
-		graphics.fill(x1, y1 + inset, x1 + 1, y2 - inset, border);
-		graphics.fill(x2 - 1, y1 + inset, x2, y2 - inset, border);
+		int height = y2 - y1;
+		int width = x2 - x1;
+		if (height <= 0) {
+			return;
+		}
+
+		// Where the arc turns hardest it steps in by more than one pixel per row, so
+		// each row's edge is widened out to meet its neighbours' — a single-pixel
+		// edge would leave the border dashed around the curve.
+		for (int row = 0; row < height; row++) {
+			int inset = ovalInset(height, width, row);
+			int outer = Math.max(inset + 1, Math.max(
+					ovalInset(height, width, Math.max(0, row - 1)),
+					ovalInset(height, width, Math.min(height - 1, row + 1))));
+			graphics.fill(x1 + inset, y1 + row, x1 + outer, y1 + row + 1, border);
+			graphics.fill(x2 - outer, y1 + row, x2 - inset, y1 + row + 1, border);
+		}
+
+		int cap = ovalInset(height, width, 0);
+		graphics.fill(x1 + cap, y1, x2 - cap, y1 + 1, border);
+		graphics.fill(x1 + cap, y2 - 1, x2 - cap, y2, border);
 	}
 
-	/** How far each end steps in per row — shared so fill and outline agree. */
-	private static int ovalInset(int height) {
-		return Math.min(3, Math.max(1, height / 4));
+	/**
+	 * How far one end steps in on a given row: the gap between the box's edge and
+	 * a circle as tall as the shape, which makes each end a half-circle and the
+	 * whole block a pill.
+	 *
+	 * <p>Capped at half the width, so a slot narrower than it is tall keeps
+	 * something in the middle to draw rather than folding through itself. Shared
+	 * by fill and outline so the two can never disagree about the silhouette.
+	 */
+	private static int ovalInset(int height, int width, int row) {
+		double radius = height / 2.0;
+		double dy = Math.abs(row - (height - 1) / 2.0);
+		int inset = (int) Math.round(radius - Math.sqrt(Math.max(0, radius * radius - dy * dy)));
+		return Math.min(inset, width / 2);
 	}
 }

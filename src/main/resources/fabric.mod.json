@@ -3,7 +3,7 @@
 	"id": "mini-macros",
 	"version": "${version}",
 	"name": "Mini Macros",
-	"description": "Build client-side macros out of drag-and-drop blocks, Scratch style, and bind them to a key.",
+	"description": "Build client-side macros out of drag-and-drop blocks and bind them to a key.",
 	"authors": [
 		"Ball534"
 	],

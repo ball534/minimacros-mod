@@ -14,8 +14,6 @@ public final class Theme {
 	public static final int TEXT_PROMPT = 0xFFFFFF55;
 	public static final int TEXT_ON_BLOCK = 0xFFFFFFFF;
 
-	/** A wash over a menu row the cursor is on, light enough to read text through. */
-	public static final int ROW_HOVER = 0x33FFFFFF;
 	/** A white frame around the row the cursor is on. */
 	public static final int ROW_HOVER_OUTLINE = 0xFFFFFFFF;
 	/** A pale wash marking the row that is selected, read through by its text. */
@@ -30,8 +28,8 @@ public final class Theme {
 
 	/** Every block is outlined in the same dark grey, whatever its category colour. */
 	public static final int BLOCK_BORDER = 0xFF2A2A30;
-	/** Hover highlight, traced around the block's own silhouette. */
-	public static final int BLOCK_HOVER = 0x66FFFFFF;
+	/** Hover highlight: solid white, traced around the block's own silhouette. */
+	public static final int BLOCK_HOVER = 0xFFFFFFFF;
 	public static final int DROP_INDICATOR = 0xFFFFFFFF;
 
 	public static final int PARAM_FILL = 0xFF56565E;

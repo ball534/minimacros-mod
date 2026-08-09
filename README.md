@@ -1,7 +1,6 @@
 # Mini Macros
 
-Build client-side macros out of drag-and-drop blocks, Scratch style, and bind
-them to a key.
+Build client-side macros out of drag-and-drop blocks and bind them to a key.
 
 A macro is a set of block stacks laid out on a canvas. Stacks standing side by
 side all run at the same time, so one can drive movement while another watches

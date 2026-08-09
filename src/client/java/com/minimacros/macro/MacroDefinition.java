@@ -89,10 +89,6 @@ public class MacroDefinition {
 		return stacks;
 	}
 
-	public void setStacks(List<ScriptStack> stacks) {
-		this.stacks = stacks;
-	}
-
 	/** A faithful clone, id included — used for the editor's working copy. */
 	public MacroDefinition copy() {
 		MacroDefinition clone = new MacroDefinition(name);

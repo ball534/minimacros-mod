@@ -34,10 +34,6 @@ public final class MacroRunner {
 		return INSTANCE;
 	}
 
-	public List<MacroExecution> running() {
-		return running;
-	}
-
 	public void onEndClientTick(Minecraft minecraft) {
 		if (minecraft.player == null || minecraft.level == null) {
 			stopAll();

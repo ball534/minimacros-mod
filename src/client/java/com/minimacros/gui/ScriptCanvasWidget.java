@@ -1,7 +1,6 @@
 package com.minimacros.gui;
 
 import com.minimacros.macro.BlockInstance;
-import com.minimacros.macro.ParamSpec;
 import com.minimacros.macro.ScriptStack;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.Font;
@@ -26,9 +25,6 @@ import java.util.function.Consumer;
  * macro runs at the same time as the others.
  */
 public final class ScriptCanvasWidget {
-	private static final int CONTEXT_ITEM_HEIGHT = 14;
-	/** Inset of a popup's contents, inside vanilla's nine-sliced border. */
-	private static final int POPUP_INSET = 4;
 	/** How far a right-click copy lands from the run it was taken from. */
 	private static final int DUPLICATE_OFFSET = 16;
 	/** How close a dragged reporter must be to a slot before it snaps in. */
@@ -58,11 +54,6 @@ public final class ScriptCanvasWidget {
 	private double lastPanY;
 
 	private BlockRenderer.EditTarget edit;
-	private ParamPopup popup;
-
-	/** An open dropdown for one param, positioned in screen space. */
-	private record ParamPopup(BlockInstance block, ParamSpec spec, int screenX, int screenY, int width) {
-	}
 
 	public ScriptCanvasWidget(Font font, Consumer<DragState> dragStarter) {
 		this.font = font;
@@ -81,7 +72,6 @@ public final class ScriptCanvasWidget {
 		this.stacks = stacks;
 		this.scrollX = 0;
 		this.scrollY = 0;
-		this.popup = null;
 	}
 
 	public List<ScriptStack> stacks() {
@@ -90,10 +80,6 @@ public final class ScriptCanvasWidget {
 
 	public boolean contains(double mouseX, double mouseY) {
 		return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
-	}
-
-	public boolean hasOverlay() {
-		return popup != null;
 	}
 
 	// --- coordinate helpers ---------------------------------------------
@@ -145,7 +131,9 @@ public final class ScriptCanvasWidget {
 		BlockRenderer.drawStack(graphics, font, layout.nodes, hovered, edit);
 
 		if (drag != null && contains(mouseX, mouseY)) {
-			BlockLayout.SlotTarget slot = nearestSlot(drag);
+			int aimX = toContentX(mouseX);
+			int aimY = toContentY(mouseY);
+			BlockLayout.SlotTarget slot = nearestSlot(drag, aimX, aimY);
 			if (slot != null) {
 				graphics.outline(slot.x - 1, slot.y - 1, slot.width + 2, slot.height + 2,
 						Theme.DROP_INDICATOR);
@@ -154,7 +142,7 @@ public final class ScriptCanvasWidget {
 				// join a stack, so offering the gap would be a false promise.
 				// Nothing shown when nothing is in range either: the block is about
 				// to become a stack of its own exactly where the cursor is.
-				BlockLayout.DropTarget target = nearestTarget(drag);
+				BlockLayout.DropTarget target = nearestTarget(aimX, aimY);
 				if (target != null) {
 					graphics.fill(target.x, target.y - 1, target.x + Math.max(target.width, 60),
 							target.y + 3, Theme.DROP_INDICATOR);
@@ -171,41 +159,6 @@ public final class ScriptCanvasWidget {
 		}
 	}
 
-	/** Popups, drawn after everything else so they sit above the panels. */
-	public void renderOverlays(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-		if (popup != null) {
-			graphics.nextStratum();
-			List<String> options = popup.spec().options();
-			int listWidth = Math.max(popup.width(), widestOption(options) + POPUP_INSET * 2 + Theme.PADDING * 2);
-
-			Panels.popup(graphics, popup.screenX(), popup.screenY(), listWidth,
-					options.size() * CONTEXT_ITEM_HEIGHT + POPUP_INSET * 2);
-
-			for (int i = 0; i < options.size(); i++) {
-				int optionY = popup.screenY() + POPUP_INSET + i * CONTEXT_ITEM_HEIGHT;
-				boolean hovered = mouseX >= popup.screenX() + POPUP_INSET
-						&& mouseX < popup.screenX() + listWidth - POPUP_INSET
-						&& mouseY >= optionY && mouseY < optionY + CONTEXT_ITEM_HEIGHT;
-				if (hovered) {
-					graphics.fill(popup.screenX() + POPUP_INSET, optionY,
-							popup.screenX() + listWidth - POPUP_INSET,
-							optionY + CONTEXT_ITEM_HEIGHT, Theme.ROW_HOVER);
-				}
-				graphics.text(font, options.get(i), popup.screenX() + POPUP_INSET + Theme.PADDING,
-						optionY + (CONTEXT_ITEM_HEIGHT - font.lineHeight) / 2, Theme.TEXT);
-			}
-		}
-
-	}
-
-	private int widestOption(List<String> options) {
-		int widest = 0;
-		for (String option : options) {
-			widest = Math.max(widest, font.width(option));
-		}
-		return widest;
-	}
-
 	// --- input ----------------------------------------------------------
 
 	/** @return true if the click was consumed. */
@@ -218,11 +171,6 @@ public final class ScriptCanvasWidget {
 			edit.block().setArg(edit.paramId(),
 					nameOf(InputConstants.Type.MOUSE.getOrCreate(event.button())));
 			edit = null;
-			return true;
-		}
-
-		if (popup != null) {
-			handlePopupClick(event);
 			return true;
 		}
 
@@ -261,10 +209,7 @@ public final class ScriptCanvasWidget {
 			// Nothing to type into a condition — it is filled by dropping a hexagon.
 			return;
 		}
-		if (param.spec.kind() == ParamSpec.Kind.DROPDOWN) {
-			popup = new ParamPopup(block, param.spec,
-					x + param.x - scrollX, y + param.y + param.height - scrollY, param.width);
-		} else if (param.spec.capturesKey()) {
+		if (param.spec.capturesKey()) {
 			// A null field marks the param as waiting for a keypress. Typing a key
 			// name by hand is what made "space" and "left.shift" so easy to get wrong.
 			edit = new BlockRenderer.EditTarget(block, param.spec.id(), null);
@@ -276,7 +221,7 @@ public final class ScriptCanvasWidget {
 
 	/**
 	 * Starts a drag. A reporter in a slot comes out on its own; a block in a
-	 * stack brings everything below it with it, as Scratch does.
+	 * stack brings everything below it with it.
 	 */
 	private void startDrag(BlockLayout.Node node, MouseButtonEvent event) {
 		int grabX = (int) Math.round(event.x()) - (x + node.x - scrollX);
@@ -319,21 +264,6 @@ public final class ScriptCanvasWidget {
 		stacks.add(new ScriptStack(node.x + DUPLICATE_OFFSET, node.y + DUPLICATE_OFFSET, copies));
 	}
 
-	private void handlePopupClick(MouseButtonEvent event) {
-		List<String> options = popup.spec().options();
-		int listWidth = Math.max(popup.width(), widestOption(options) + POPUP_INSET * 2 + Theme.PADDING * 2);
-
-		for (int i = 0; i < options.size(); i++) {
-			int optionY = popup.screenY() + POPUP_INSET + i * CONTEXT_ITEM_HEIGHT;
-			if (event.x() >= popup.screenX() && event.x() < popup.screenX() + listWidth
-					&& event.y() >= optionY && event.y() < optionY + CONTEXT_ITEM_HEIGHT) {
-				popup.block().setArg(popup.spec().id(), options.get(i));
-				break;
-			}
-		}
-		popup = null;
-	}
-
 	public void mouseDragged(double mouseX, double mouseY) {
 		if (!panning) {
 			return;
@@ -356,11 +286,18 @@ public final class ScriptCanvasWidget {
 	/**
 	 * Drops a dragged stack: into a slot, onto the end of a stack it was let go
 	 * near, or — failing both — down as a new stack of its own at the cursor.
+	 *
+	 * <p>What it snaps onto is measured from the cursor, but a stack that snaps
+	 * onto nothing is still set down where its ghost was drawn — the cursor
+	 * decides what the drop means, and the ghost shows where it lands.
 	 */
-	public void drop(DragState drag) {
+	public void drop(DragState drag, double mouseX, double mouseY) {
 		rebuild();
 
-		BlockLayout.SlotTarget slot = nearestSlot(drag);
+		int aimX = toContentX(mouseX);
+		int aimY = toContentY(mouseY);
+
+		BlockLayout.SlotTarget slot = nearestSlot(drag, aimX, aimY);
 		if (slot != null) {
 			slot.owner.setInput(slot.spec.id(), drag.blocks().getFirst());
 			pruneEmptyStacks();
@@ -375,7 +312,7 @@ public final class ScriptCanvasWidget {
 			return;
 		}
 
-		BlockLayout.DropTarget target = nearestTarget(drag);
+		BlockLayout.DropTarget target = nearestTarget(aimX, aimY);
 		if (target != null) {
 			target.list.addAll(Math.min(target.index, target.list.size()), drag.blocks());
 		} else {
@@ -388,13 +325,16 @@ public final class ScriptCanvasWidget {
 	/**
 	 * The join a dragged stack would snap onto, or null when it is not close
 	 * enough to any of them and should stand on its own instead.
+	 *
+	 * <p>Measured from the cursor rather than from the dragged stack's own corner.
+	 * Grabbing a wide block by its right-hand end put that corner most of a block
+	 * away from the hand holding it, so a join would light up while the cursor was
+	 * still nowhere near it.
 	 */
-	private BlockLayout.DropTarget nearestTarget(DragState drag) {
+	private BlockLayout.DropTarget nearestTarget(int contentX, int contentY) {
 		if (layout == null || layout.targets.isEmpty()) {
 			return null;
 		}
-		int contentX = drag.screenX() - x + scrollX;
-		int contentY = drag.screenY() - y + scrollY;
 
 		BlockLayout.DropTarget best = null;
 		double bestDistance = STACK_SNAP_RADIUS;
@@ -413,12 +353,10 @@ public final class ScriptCanvasWidget {
 	 * is genuinely near one, so a reporter can still be dropped into the stack
 	 * as an expression statement — which is how {@code =} assignments are written.
 	 */
-	private BlockLayout.SlotTarget nearestSlot(DragState drag) {
+	private BlockLayout.SlotTarget nearestSlot(DragState drag, int contentX, int contentY) {
 		if (layout == null || !drag.isReporter()) {
 			return null;
 		}
-		int contentX = drag.screenX() - x + scrollX;
-		int contentY = drag.screenY() - y + scrollY;
 
 		BlockLayout.SlotTarget best = null;
 		double bestDistance = SLOT_SNAP_RADIUS;
@@ -462,13 +400,6 @@ public final class ScriptCanvasWidget {
 	// --- inline editing -------------------------------------------------
 
 	public boolean keyPressed(KeyEvent event) {
-		if (popup != null) {
-			if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
-				popup = null;
-				return true;
-			}
-			return false;
-		}
 		if (edit == null) {
 			return false;
 		}

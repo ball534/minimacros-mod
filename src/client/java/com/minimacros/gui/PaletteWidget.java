@@ -70,7 +70,7 @@ public final class PaletteWidget {
 	}
 
 	/** Top of the shelf panel, below the picker and its separator. */
-	public int shelfTop() {
+	private int shelfTop() {
 		return y + PICKER_HEIGHT + PICKER_GAP;
 	}
 

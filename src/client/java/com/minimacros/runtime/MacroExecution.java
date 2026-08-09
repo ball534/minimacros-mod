@@ -66,10 +66,6 @@ public final class MacroExecution {
 		return finished;
 	}
 
-	void requestStop() {
-		stopRequested = true;
-	}
-
 	/** Ends the run and releases anything it was holding down. */
 	public void stop() {
 		if (!finished) {

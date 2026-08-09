@@ -9,7 +9,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
@@ -124,9 +123,6 @@ public class MacroEditorScreen extends Screen {
 				Component.literal("Name"));
 		nameBox.setHint(Component.literal("Macro name"));
 		nameBox.setMaxLength(64);
-		nameBox.setTooltip(Tooltip.create(Component.literal(
-				"The name this macro is saved under. Left empty it saves as \"" + DEFAULT_NAME
-						+ "\"; saving over an existing name replaces it.")));
 		addRenderableWidget(nameBox);
 
 		keybindButton = Button.builder(Component.literal("Keybind"), button -> {
@@ -134,21 +130,17 @@ public class MacroEditorScreen extends Screen {
 			updateKeybindLabel();
 		})
 				.bounds(contentX + cell + gap, toolbarY, cell, Panels.WIDGET_HEIGHT)
-				.tooltip(Tooltip.create(Component.literal(
-						"Click, then press the key that should run this macro. Escape clears it.")))
 				.build();
 		addRenderableWidget(keybindButton);
 
-		addRenderableWidget(Button.builder(Component.literal("Save"), button -> commitDraft())
+		addRenderableWidget(Button.builder(
+						Component.literal("Save").withStyle(ChatFormatting.GREEN), button -> commitDraft())
 				.bounds(contentX + (cell + gap) * 2, toolbarY, cell, Panels.WIDGET_HEIGHT)
-				.tooltip(Tooltip.create(Component.literal(
-						"Writes this macro's name, keybind and blocks to the list on the left.")))
 				.build());
 
 		addRenderableWidget(Button.builder(
 						Component.literal("Delete").withStyle(ChatFormatting.RED), button -> deleteSelected())
 				.bounds(contentX + (cell + gap) * 3, toolbarY, cell, Panels.WIDGET_HEIGHT)
-				.tooltip(Tooltip.create(Component.literal("Removes the saved macro with this name.")))
 				.build());
 	}
 
@@ -161,7 +153,6 @@ public class MacroEditorScreen extends Screen {
 
 		addRenderableWidget(Button.builder(Component.literal("Cancel"), button -> onClose())
 				.bounds(startX, barY, buttonWidth, Panels.WIDGET_HEIGHT)
-				.tooltip(Tooltip.create(Component.literal("Closes the editor. Unsaved edits are discarded.")))
 				.build());
 
 		addRenderableWidget(Button.builder(Component.literal("Done"), button -> {
@@ -169,8 +160,6 @@ public class MacroEditorScreen extends Screen {
 			onClose();
 		})
 				.bounds(startX + buttonWidth + gap, barY, buttonWidth, Panels.WIDGET_HEIGHT)
-				.tooltip(Tooltip.create(Component.literal(
-						"Closes the editor, keeping which macros are ticked on. Use Save for anything else.")))
 				.build());
 	}
 
@@ -208,8 +197,6 @@ public class MacroEditorScreen extends Screen {
 
 		paletteToggle.setPosition(splitterX, contentTop);
 		paletteToggle.setMessage(Component.literal(paletteOpen ? ">" : "<"));
-		paletteToggle.setTooltip(Tooltip.create(Component.literal(
-				paletteOpen ? "Hide the block store" : "Show the block store")));
 	}
 
 	// --- macro management -----------------------------------------------
@@ -360,7 +347,6 @@ public class MacroEditorScreen extends Screen {
 
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 
-		canvas.renderOverlays(graphics, mouseX, mouseY);
 		if (paletteOpen) {
 			palette.renderCategoryList(graphics, mouseX, mouseY);
 		}
@@ -385,9 +371,6 @@ public class MacroEditorScreen extends Screen {
 		}
 
 		// An open popup swallows the next click, wherever it lands.
-		if (canvas.hasOverlay()) {
-			return canvas.mouseClicked(event);
-		}
 		if (paletteOpen && palette.categoryListOpen()) {
 			return palette.mouseClicked(event);
 		}
@@ -474,7 +457,7 @@ public class MacroEditorScreen extends Screen {
 			return;
 		}
 		if (canvas.contains(event.x(), event.y())) {
-			canvas.drop(drag);
+			canvas.drop(drag, event.x(), event.y());
 		} else {
 			drag.restore();
 			canvas.pruneEmptyStacks();

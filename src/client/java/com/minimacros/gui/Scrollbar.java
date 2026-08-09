@@ -48,12 +48,12 @@ public final class Scrollbar {
 		return dragging;
 	}
 
-	public int maxScroll() {
+	private int maxScroll() {
 		return Math.max(0, contentHeight - trackHeight);
 	}
 
 	/** Vanilla hides the bar entirely when everything already fits. */
-	public boolean scrollable() {
+	private boolean scrollable() {
 		return trackHeight > 0 && maxScroll() > 0;
 	}
 
@@ -67,7 +67,7 @@ public final class Scrollbar {
 		return trackY + (int) (amount * (trackHeight - thumbHeight()) / maxScroll());
 	}
 
-	public boolean isOver(double mouseX, double mouseY) {
+	private boolean isOver(double mouseX, double mouseY) {
 		return scrollable()
 				&& mouseX >= trackX && mouseX < trackX + Panels.SCROLLBAR_WIDTH
 				&& mouseY >= trackY && mouseY < trackY + trackHeight;

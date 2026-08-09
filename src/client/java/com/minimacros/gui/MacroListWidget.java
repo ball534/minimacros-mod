@@ -59,11 +59,7 @@ public final class MacroListWidget {
 		refresh();
 	}
 
-	public MacroDefinition selected() {
-		return selected;
-	}
-
-	public void select(MacroDefinition macro) {
+	private void select(MacroDefinition macro) {
 		this.selected = macro;
 		onSelect.accept(macro);
 	}

@@ -33,8 +33,6 @@ public final class BlockLayout {
 	public static final int PARAM_HEIGHT = 14;
 	/** Space either side of the text in a field, and the same at both ends. */
 	public static final int PARAM_PAD_X = 4;
-	/** Width the arrow on a dropdown field needs. */
-	public static final int DROPDOWN_ARROW_WIDTH = 8;
 	public static final int MIN_HEADER_WIDTH = 40;
 	public static final int NOTCH_X = 8;
 	public static final int NOTCH_WIDTH = 10;
@@ -414,8 +412,7 @@ public final class BlockLayout {
 	/** Same padding either side of the text, so it reads as centred in the field. */
 	public static int paramWidth(Font font, ParamSpec spec, String value) {
 		int textWidth = font.width(value == null ? "" : value);
-		int arrow = spec.kind() == ParamSpec.Kind.DROPDOWN ? DROPDOWN_ARROW_WIDTH : 0;
-		return Math.max(spec.minWidth(), textWidth + PARAM_PAD_X * 2 + arrow);
+		return Math.max(spec.minWidth(), textWidth + PARAM_PAD_X * 2);
 	}
 
 	public static int stackHeight(List<Node> nodes) {
@@ -429,10 +426,16 @@ public final class BlockLayout {
 	/**
 	 * Deepest block under the point, so clicking inside a C-block or a slot
 	 * picks the nested block rather than its container.
+	 *
+	 * <p>Searched back to front, because stacks are drawn in list order and so the
+	 * last one drawn is the one lying on top. Going forwards handed the cursor
+	 * whichever stack happened to be underneath, which — since a dropped or
+	 * duplicated stack is added to the end — was reliably the one <em>not</em>
+	 * being pointed at.
 	 */
 	public static Node hitTest(List<Node> nodes, int px, int py) {
-		for (Node node : nodes) {
-			Node hit = hitTestNode(node, px, py);
+		for (int i = nodes.size() - 1; i >= 0; i--) {
+			Node hit = hitTestNode(nodes.get(i), px, py);
 			if (hit != null) {
 				return hit;
 			}

@@ -1,10 +1,13 @@
 package com.minimacros.macro;
 
 import com.minimacros.runtime.Values;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Every block Mini Macros knows about.
@@ -68,6 +71,7 @@ public final class BlockRegistry {
 		registerControl();
 		registerMessages();
 		registerVariables();
+		registerPlayerState();
 		registerOperators();
 		registerComparators();
 		ALL = List.copyOf(TYPES.values());
@@ -227,6 +231,78 @@ public final class BlockRegistry {
 		register(BlockType.builder("vars.none", BlockCategory.VARIABLES, Values.NONE_LITERAL)
 				.reporter((block, ctx) -> Values.NONE)
 				.build());
+	}
+
+	// --- Player state ---------------------------------------------------
+
+	/**
+	 * Readings off the player, as reporters that plug into any slot: what a
+	 * script needs to decide whether to eat, to swap tools, or to stop.
+	 *
+	 * <p>They report {@code None} whenever there is no player to read — the
+	 * editor is reachable from the title screen — rather than a zero, which a
+	 * script would take for a genuine reading of empty.
+	 */
+	private static void registerPlayerState() {
+		register(BlockType.builder("player.health", BlockCategory.VARIABLES, "health")
+				.reporter(ofPlayer(player -> rounded(player.getHealth())))
+				.build());
+
+		register(BlockType.builder("player.food_level", BlockCategory.VARIABLES, "foodLevel")
+				.reporter(ofPlayer(player -> (double) player.getFoodData().getFoodLevel()))
+				.build());
+
+		register(BlockType.builder("player.saturation_level", BlockCategory.VARIABLES, "saturationLevel")
+				.reporter(ofPlayer(player -> rounded(player.getFoodData().getSaturationLevel())))
+				.build());
+
+		// An empty hand is a reading in its own right, so these report empty text
+		// and a count of zero rather than None.
+		register(BlockType.builder("player.selected_item_name", BlockCategory.VARIABLES, "selectedItemName")
+				.reporter(ofHeldItem(stack -> stack.isEmpty() ? "" : stack.getHoverName().getString()))
+				.build());
+
+		register(BlockType.builder("player.selected_item_qty", BlockCategory.VARIABLES, "selectedItemQty")
+				.reporter(ofHeldItem(stack -> (double) stack.getCount()))
+				.build());
+
+		// Uses left, not damage taken, so "durability < 20" reads as the warning it
+		// looks like. Anything that cannot wear out has no reading at all, which
+		// keeps a stack of dirt from looking like a tool about to break.
+		register(BlockType.builder("player.selected_item_durability", BlockCategory.VARIABLES,
+						"selectedItemDurability")
+				.reporter(ofHeldItem(stack -> stack.isDamageableItem()
+						? (double) (stack.getMaxDamage() - stack.getDamageValue())
+						: Values.NONE))
+				.build());
+
+		// Counted 1-9 as the hotbar keys are, not 0-8 as the inventory holds it, so
+		// the number this reports is the one buttonDown takes to select that slot.
+		register(BlockType.builder("player.selected_item_slot", BlockCategory.VARIABLES, "selectedItemSlot")
+				.reporter(ofPlayer(player -> (double) (player.getInventory().getSelectedSlot() + 1)))
+				.build());
+	}
+
+	/** Wraps a reading of the player so that having no player reports None. */
+	private static BlockType.Evaluator ofPlayer(Function<LocalPlayer, Object> reading) {
+		return (block, ctx) -> {
+			LocalPlayer player = ctx.player();
+			return player == null ? Values.NONE : reading.apply(player);
+		};
+	}
+
+	/** As {@link #ofPlayer}, for a reading of whatever is in the main hand. */
+	private static BlockType.Evaluator ofHeldItem(Function<ItemStack, Object> reading) {
+		return ofPlayer(player -> reading.apply(player.getInventory().getSelectedItem()));
+	}
+
+	/**
+	 * Health and saturation are floats, and a float widened to a double carries
+	 * noise the player never sees on their own hunger bar — 6.6 arriving as
+	 * 6.599999904632568. Two places is finer than either is ever displayed.
+	 */
+	private static Double rounded(float value) {
+		return Math.round(value * 100.0) / 100.0;
 	}
 
 	// --- Operators ------------------------------------------------------

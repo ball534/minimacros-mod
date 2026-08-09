@@ -8,7 +8,7 @@ import net.minecraft.resources.Identifier;
 
 /**
  * The vanilla furniture the editor sits in: the tiled list panels, the strips
- * that separate them, the scrollbars and the popup backdrop.
+ * that separate them, the scrollbars and the checkboxes.
  *
  * <p>These are the same textures and the same measurements Minecraft's own
  * options screens use, drawn the same way, so the editor reads as part of the
@@ -29,7 +29,6 @@ public final class Panels {
 	private static final Identifier INWORLD_MENU_LIST_BACKGROUND =
 			Identifier.withDefaultNamespace("textures/gui/inworld_menu_list_background.png");
 
-	private static final Identifier POPUP_BACKGROUND = Identifier.withDefaultNamespace("popup/background");
 	private static final Identifier SCROLLER = Identifier.withDefaultNamespace("widget/scroller");
 	private static final Identifier SCROLLER_BACKGROUND =
 			Identifier.withDefaultNamespace("widget/scroller_background");
@@ -57,13 +56,13 @@ public final class Panels {
 	 * and pushed along by the scroll, which is what stops it sliding under the
 	 * rows as they move.
 	 */
-	public static void background(GuiGraphicsExtractor graphics, int x, int y, int width, int height, double scroll) {
+	private static void background(GuiGraphicsExtractor graphics, int x, int y, int width, int height, double scroll) {
 		graphics.blit(RenderPipelines.GUI_TEXTURED,
 				inWorld() ? INWORLD_MENU_LIST_BACKGROUND : MENU_LIST_BACKGROUND,
 				x, y, x + width, (float) (y + height + scroll), width, height, 32, 32);
 	}
 
-	public static void separators(GuiGraphicsExtractor graphics, int x, int y, int width, int height) {
+	private static void separators(GuiGraphicsExtractor graphics, int x, int y, int width, int height) {
 		horizontalSeparator(graphics, x, y - SEPARATOR_HEIGHT, width, true);
 		horizontalSeparator(graphics, x, y + height, width, false);
 	}
@@ -89,11 +88,6 @@ public final class Panels {
 				barX, trackY, SCROLLBAR_WIDTH, trackHeight);
 		graphics.blitSprite(RenderPipelines.GUI_TEXTURED, SCROLLER,
 				barX, thumbY, SCROLLBAR_WIDTH, thumbHeight);
-	}
-
-	/** The backdrop vanilla puts behind popups, used here for the dropdowns. */
-	public static void popup(GuiGraphicsExtractor graphics, int x, int y, int width, int height) {
-		graphics.blitSprite(RenderPipelines.GUI_TEXTURED, POPUP_BACKGROUND, x, y, width, height);
 	}
 
 	public static void checkbox(GuiGraphicsExtractor graphics, int x, int y, int size,

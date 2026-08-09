@@ -70,10 +70,6 @@ public class BlockInstance {
 		inputs.remove(paramId);
 	}
 
-	public List<List<BlockInstance>> branches() {
-		return branches;
-	}
-
 	public List<BlockInstance> branch(int index) {
 		return branches.get(index);
 	}

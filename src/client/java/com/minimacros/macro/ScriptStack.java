@@ -39,11 +39,6 @@ public class ScriptStack {
 		return y;
 	}
 
-	public void moveTo(int x, int y) {
-		this.x = x;
-		this.y = y;
-	}
-
 	/** The live list — the editor adds to and removes from it in place. */
 	public List<BlockInstance> blocks() {
 		return blocks;
