@@ -5,6 +5,14 @@ All notable changes to Mini Macros are recorded here. Versions follow
 
 ## Unreleased
 
+### Added
+
+- Event blocks for physical button presses/releases, held buttons, enabling a
+  macro, and periodic execution. Press events offer run-once, restart and toggle
+  modes; trigger buttons support keyboard/mouse modifier combinations.
+- Physical input conditions, wait-until, and wait-for-next-press blocks.
+- Distinct event hats, event placement constraints, and inline run-mode dropdowns.
+
 ### Changed
 
 - Restyled only the block library, blocks, and canvas with muted material colours,
@@ -20,6 +28,9 @@ All notable changes to Mini Macros are recorded here. Versions follow
 - Removed unused category-menu constants and execution-context accessors.
 - Reused keybind tracking collections and replaced an unnecessary concurrent
   collection on the client thread.
+- Removed macro-level keybind controls. Enabled macros listen to the event blocks
+  at the beginning of their stacks. Saved keybinds migrate to restart triggers;
+  new saves use format version 3 without macro-level keybind fields.
 
 ### Fixed
 
@@ -36,8 +47,9 @@ All notable changes to Mini Macros are recorded here. Versions follow
 
 ### Validation
 
-- Added dependency-free regression checks for saved data and macro execution,
-  included in the Gradle build.
+- Added dependency-free regression checks for saved data, physical events,
+  execution modes, waits, shared variables, and editor interactions at multiple
+  zoom levels, included in the Gradle build.
 
 ## 1.1.0
 

@@ -12,19 +12,22 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 
 /**
- * One in-flight macro.
+ * One in-flight script body, with bounded work and resumable control frames.
  *
- * <p>Each of the macro's stacks becomes a {@link Strand} with its own frame stack
+ * <p>The standalone constructor gives each macro stack a {@link Strand} with its own frame stack
  * and its own wait timer, and every strand is advanced on every tick — so stacks
  * standing side by side on the canvas genuinely run alongside each other, while
  * the blocks within one stack still run strictly in order. Frames are explicit
  * rather than recursive so a strand can pause mid-script for a {@code wait} and
  * pick up again on a later tick.
  *
- * <p>Variables and held keys are shared across strands: they are one macro, so
- * one stack can set a variable another reads, or hold a key another releases.
+ * <p>The event runner creates one execution per event stack and shares variables
+ * for the lifetime of the enabled macro. Simulated holds belong to the execution
+ * that pressed them, so stopping one event cannot release another event's keys.
  */
 public final class MacroExecution {
 	/**
@@ -40,6 +43,7 @@ public final class MacroExecution {
 	private final MacroDefinition macro;
 	private final InputSimulator input = new InputSimulator();
 	private final ExecutionContext context;
+	private final PhysicalInput physicalInput;
 	private final List<Strand> strands = new ArrayList<>();
 
 	/** The strand currently being stepped, so blocks act on the right one. */
@@ -49,13 +53,28 @@ public final class MacroExecution {
 	private boolean finished;
 
 	public MacroExecution(MacroDefinition macro) {
+		this(macro, null, new PhysicalInput());
+	}
+
+	/** Runs one event stack; its leading hat selects the trigger, not an action. */
+	public MacroExecution(MacroDefinition macro, ScriptStack eventStack, PhysicalInput physicalInput) {
+		this(macro, eventStack, physicalInput, new LinkedHashMap<>());
+	}
+
+	MacroExecution(MacroDefinition macro, ScriptStack eventStack, PhysicalInput physicalInput, Map<String, Object> variables) {
 		this.macro = macro;
-		this.context = new ExecutionContext(this, input);
-		for (ScriptStack stack : macro.stacks()) {
+		this.physicalInput = physicalInput;
+		this.context = new ExecutionContext(this, input, variables);
+		for (ScriptStack stack : eventStack == null ? macro.stacks() : List.of(eventStack)) {
 			if (!stack.isEmpty()) {
-				strands.add(new Strand(stack.blocks()));
+				int first = eventStack == null ? 0 : 1;
+				strands.add(new Strand(stack.blocks().subList(first, stack.blocks().size())));
 			}
 		}
+	}
+
+	PhysicalInput physicalInput() {
+		return physicalInput;
 	}
 
 	public MacroDefinition macro() {
@@ -196,6 +215,25 @@ public final class MacroExecution {
 	 */
 	private boolean step(Strand strand, Frame frame, BlockInstance block, BlockType type) {
 		switch (type.id()) {
+			case BlockRegistry.WAIT_UNTIL -> {
+				if (!Values.truthy(context.resolve(block, "condition"))) {
+					return false;
+				}
+				frame.index++;
+			}
+			case BlockRegistry.WAIT_NEXT_PRESS -> {
+				if (strand.waitingForPress != block) {
+					strand.waitingForPress = block;
+					strand.pressWaitStarted = physicalInput.tickNumber();
+					return false;
+				}
+				if (physicalInput.tickNumber() <= strand.pressWaitStarted
+						|| !context.inputPressed(context.text(context.resolve(block, "button")))) {
+					return false;
+				}
+				strand.waitingForPress = null;
+				frame.index++;
+			}
 			case BlockRegistry.LOOP -> {
 				frame.index++;
 				int times = context.resolveCount(block, "times");
@@ -278,6 +316,8 @@ public final class MacroExecution {
 		private final Deque<Frame> frames = new ArrayDeque<>();
 		private int waitTicks;
 		private boolean done;
+		private BlockInstance waitingForPress;
+		private long pressWaitStarted;
 
 		// An in-progress lookX/lookY sweep, applied a slice at a time.
 		private double turnYawRemaining;

@@ -1,14 +1,13 @@
 package com.minimacros.macro;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/** A named, keybindable script: one or more stacks that all run at once. */
+/** A named script made of free-standing stacks, each with its own event trigger. */
 public class MacroDefinition {
 	public static final int UNBOUND = InputConstants.UNKNOWN.getValue();
 
@@ -19,8 +18,9 @@ public class MacroDefinition {
 	private String id = UUID.randomUUID().toString();
 	private String name = "New Macro";
 	private boolean enabled = true;
+	/** Legacy macro-level keybind fields, retained only so old saves can be migrated. */
 	private int keyCode = UNBOUND;
-	/** SDL scancodes of the modifier keys held alongside {@link #keyCode}. */
+	/** SDL scancodes of the modifier keys held alongside the legacy {@link #keyCode}. */
 	private List<Integer> modifierKeys = new ArrayList<>();
 	private List<ScriptStack> stacks = new ArrayList<>();
 	/**
@@ -83,12 +83,43 @@ public class MacroDefinition {
 				.filter(key -> key != UNBOUND).collect(Collectors.toCollection(ArrayList::new));
 	}
 
-	public boolean hasKeybind() {
-		return keyCode != UNBOUND;
+	/**
+	 * Converts the former macro-level keybind into a restart trigger on every
+	 * stack, preserving the old behavior where stacks began together.
+	 */
+	public void migrateLegacyKeybindToEvents() {
+		if (hasKeybind() && !stacks.isEmpty()) {
+			List<String> keys = new ArrayList<>(modifierKeys.size() + 1);
+			for (int modifier : modifierKeys) {
+				keys.add(keyToken(modifier));
+			}
+			keys.add(keyToken(keyCode));
+			String combination = String.join(" + ", keys);
+
+			for (ScriptStack stack : stacks) {
+				if (!stack.blocks().isEmpty()) {
+					BlockType firstType = stack.blocks().getFirst().type();
+					if (firstType != null && firstType.isEvent()) {
+						continue;
+					}
+				}
+				BlockInstance trigger = BlockInstance.create(BlockRegistry.get(BlockRegistry.WHEN_PRESSED));
+				trigger.setArg("button", combination);
+				trigger.setArg("mode", "restart");
+				stack.blocks().add(0, trigger);
+			}
+		}
+		clearKeybind();
 	}
 
-	public Component keyDisplayName() {
-		return Keybind.displayName(keyCode, modifierKeys);
+	private static String keyToken(int scancode) {
+		String name = InputConstants.Type.KEYBOARD.getOrCreate(scancode).getName();
+		String prefix = "key.keyboard.";
+		return name.startsWith(prefix) ? name.substring(prefix.length()) : name;
+	}
+
+	public boolean hasKeybind() {
+		return keyCode != UNBOUND;
 	}
 
 	/** The live list — the editor adds and removes stacks in place. */

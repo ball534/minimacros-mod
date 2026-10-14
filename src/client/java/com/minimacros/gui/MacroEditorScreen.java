@@ -2,7 +2,6 @@ package com.minimacros.gui;
 
 import com.minimacros.config.MacroStorage;
 import com.minimacros.macro.BlockInstance;
-import com.minimacros.macro.Keybind;
 import com.minimacros.macro.MacroDefinition;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -23,7 +22,7 @@ import java.util.List;
  * The Mini Macros editor.
  *
  * <p>Edits a working copy of the macro list, so Cancel really does discard.
- * Save is the only thing that writes a macro's name, keybind and blocks —
+ * Save is the only thing that writes a macro's name and blocks —
  * nothing is created or rewritten just by looking at it. Done is deliberately
  * narrower: it writes only which macros are ticked on or off, so arming a macro
  * from the list does not need the editor to save anything else.
@@ -53,13 +52,11 @@ public class MacroEditorScreen extends Screen {
 
 	private EditBox searchBox;
 	private EditBox nameBox;
-	private Button keybindButton;
 	private Button paletteToggle;
 
 	private MacroDefinition draft = new MacroDefinition("");
 	private DragState drag;
 	private boolean paletteOpen = true;
-	private boolean capturingKeybind;
 
 	// Panel bounds, recomputed whenever the palette opens or closes.
 	private int leftWidth;
@@ -104,7 +101,6 @@ public class MacroEditorScreen extends Screen {
 		// a macro, so there is nothing to preselect.
 		nameBox.setValue(draft.name());
 		canvas.setStacks(draft.stacks());
-		updateKeybindLabel();
 	}
 
 	private void buildLeftColumn() {
@@ -118,7 +114,7 @@ public class MacroEditorScreen extends Screen {
 	private void buildTopBar() {
 		int available = this.width - MARGIN - contentX;
 		int gap = 6;
-		int cell = (available - gap * 3) / 4;
+		int cell = (available - gap * 2) / 3;
 
 		nameBox = new EditBox(this.font, contentX, toolbarY, cell, Panels.WIDGET_HEIGHT,
 				Component.literal("Name"));
@@ -126,22 +122,14 @@ public class MacroEditorScreen extends Screen {
 		nameBox.setMaxLength(64);
 		addRenderableWidget(nameBox);
 
-		keybindButton = Button.builder(Component.literal("Keybind"), button -> {
-			capturingKeybind = true;
-			updateKeybindLabel();
-		})
-				.bounds(contentX + cell + gap, toolbarY, cell, Panels.WIDGET_HEIGHT)
-				.build();
-		addRenderableWidget(keybindButton);
-
 		addRenderableWidget(Button.builder(
 						Component.literal("Save").withStyle(ChatFormatting.GREEN), button -> commitDraft())
-				.bounds(contentX + (cell + gap) * 2, toolbarY, cell, Panels.WIDGET_HEIGHT)
+				.bounds(contentX + cell + gap, toolbarY, cell, Panels.WIDGET_HEIGHT)
 				.build());
 
 		addRenderableWidget(Button.builder(
 						Component.literal("Delete").withStyle(ChatFormatting.RED), button -> deleteSelected())
-				.bounds(contentX + (cell + gap) * 3, toolbarY, cell, Panels.WIDGET_HEIGHT)
+				.bounds(contentX + (cell + gap) * 2, toolbarY, cell, Panels.WIDGET_HEIGHT)
 				.build());
 	}
 
@@ -208,21 +196,10 @@ public class MacroEditorScreen extends Screen {
 	/** Loads a saved macro into the draft. Edits stay local until Save. */
 	private void onMacroSelected(MacroDefinition macro) {
 		canvas.commitEdit();
-		capturingKeybind = false;
 		draft = macro == null ? new MacroDefinition("") : macro.copy();
 
 		nameBox.setValue(draft.name());
 		canvas.setStacks(draft.stacks());
-		updateKeybindLabel();
-	}
-
-	private void updateKeybindLabel() {
-		if (capturingKeybind) {
-			keybindButton.setMessage(
-					Component.literal("Press keys...").withStyle(ChatFormatting.YELLOW));
-		} else {
-			keybindButton.setMessage(draft.keyDisplayName());
-		}
 	}
 
 	private MacroDefinition findByName(String name) {
@@ -289,7 +266,7 @@ public class MacroEditorScreen extends Screen {
 
 	/**
 	 * Writes back only the arm/disarm ticks from the list, matching macros by id.
-	 * Everything else the editor is holding — the draft's name, keybind and blocks
+	 * Everything else the editor is holding — the draft's name and blocks
 	 * — stays unsaved, because Save is what commits those.
 	 */
 	private void persistEnabledFlags() {
@@ -383,6 +360,7 @@ public class MacroEditorScreen extends Screen {
 		if (drag != null) {
 			return true;
 		}
+		if (canvas.choiceOpen()) return canvas.mouseClicked(event);
 
 		if (paletteOpen && palette.categoryMenuOpen()) return palette.mouseClicked(event);
 
@@ -478,6 +456,7 @@ public class MacroEditorScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+		if (canvas.choiceOpen()) return canvas.mouseScrolled(mouseX, mouseY, scrollY);
 		if (paletteOpen && palette.contains(mouseX, mouseY)) {
 			return palette.mouseScrolled(scrollY);
 		}
@@ -496,10 +475,6 @@ public class MacroEditorScreen extends Screen {
 			palette.closeCategoryMenu();
 			return true;
 		}
-		if (capturingKeybind) {
-			captureKeybind(event);
-			return true;
-		}
 		if (canvas.keyPressed(event)) {
 			return true;
 		}
@@ -512,23 +487,6 @@ public class MacroEditorScreen extends Screen {
 			}
 		}
 		return super.keyPressed(event);
-	}
-
-	/**
-	 * Builds a combination like "Left Shift + L". Modifier keys on their own do
-	 * not finish the capture — it waits for the key they are modifying.
-	 */
-	private void captureKeybind(KeyEvent event) {
-		if (event.key() == InputConstants.KEY_ESCAPE) {
-			draft.clearKeybind();
-		} else if (Keybind.isModifier(event.key())) {
-			updateKeybindLabel();
-			return;
-		} else {
-			draft.setKeybind(event.key(), Keybind.heldModifiers());
-		}
-		capturingKeybind = false;
-		updateKeybindLabel();
 	}
 
 	private boolean copySelectedToClipboard() {
@@ -555,6 +513,11 @@ public class MacroEditorScreen extends Screen {
 	@Override
 	public boolean charTyped(CharacterEvent event) {
 		return canvas.charTyped(event) || super.charTyped(event);
+	}
+
+	@Override
+	public boolean keyReleased(KeyEvent event) {
+		return canvas.keyReleased(event) || super.keyReleased(event);
 	}
 
 	@Override

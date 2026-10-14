@@ -1,5 +1,8 @@
 package com.minimacros.macro;
 
+import java.util.List;
+import java.util.Objects;
+
 /**
  * One editable slot inside a block, rendered as an inline field.
  *
@@ -7,7 +10,16 @@ package com.minimacros.macro;
  * typed into it. They differ for slots, which are all {@code SLOT} but each
  * accept a different sort of literal when no reporter is plugged in.
  */
-public record ParamSpec(String id, Kind kind, String defaultValue, int minWidth, Kind literalKind) {
+public record ParamSpec(String id, Kind kind, String defaultValue, int minWidth, Kind literalKind,
+		List<String> choices) {
+
+	public ParamSpec(String id, Kind kind, String defaultValue, int minWidth, Kind literalKind) {
+		this(id, kind, defaultValue, minWidth, literalKind, List.of());
+	}
+
+	public ParamSpec {
+		choices = List.copyOf(Objects.requireNonNull(choices));
+	}
 
 	public enum Kind {
 		/** Whole number. */
@@ -33,7 +45,9 @@ public record ParamSpec(String id, Kind kind, String defaultValue, int minWidth,
 		 * fits, which is what stops {@code loop}'s old mistake — a comparison
 		 * landing somewhere that wanted a number — from being expressible.
 		 */
-		BOOLEAN
+		BOOLEAN,
+		/** A value selected from a fixed list. */
+		CHOICE
 	}
 
 	/**
@@ -46,6 +60,16 @@ public record ParamSpec(String id, Kind kind, String defaultValue, int minWidth,
 
 	public static ParamSpec string(String id) {
 		return new ParamSpec(id, Kind.STRING, "", EMPTY_WIDTH, Kind.STRING);
+	}
+
+	/** A key captured as a direct literal rather than a reporter-capable slot. */
+	public static ParamSpec key(String id) {
+		return new ParamSpec(id, Kind.KEY, "", EMPTY_WIDTH, Kind.KEY);
+	}
+
+	/** A direct number literal with an explicit default. */
+	public static ParamSpec number(String id, String defaultValue) {
+		return new ParamSpec(id, Kind.NUMBER, defaultValue, EMPTY_WIDTH, Kind.NUMBER);
 	}
 
 	/** A slot whose typed literal is free text. */
@@ -71,6 +95,11 @@ public record ParamSpec(String id, Kind kind, String defaultValue, int minWidth,
 	/** A condition: a hexagonal hole that only a boolean block fits. */
 	public static ParamSpec booleanSlot(String id) {
 		return new ParamSpec(id, Kind.SLOT, "", EMPTY_BOOLEAN_WIDTH, Kind.BOOLEAN);
+	}
+
+	/** A dropdown with a fixed set of string values. */
+	public static ParamSpec choice(String id, String defaultValue, List<String> choices) {
+		return new ParamSpec(id, Kind.CHOICE, defaultValue, EMPTY_WIDTH, Kind.CHOICE, choices);
 	}
 
 	/** True when only a boolean block may be dropped here, and nothing typed. */

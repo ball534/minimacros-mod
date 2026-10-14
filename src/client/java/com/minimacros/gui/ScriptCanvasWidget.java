@@ -1,6 +1,7 @@
 package com.minimacros.gui;
 
 import com.minimacros.macro.BlockInstance;
+import com.minimacros.macro.ParamSpec;
 import com.minimacros.macro.ScriptStack;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
@@ -55,6 +56,18 @@ public final class ScriptCanvasWidget {
 	private double lastPanY;
 
 	private BlockRenderer.EditTarget edit;
+	private ChoiceEdit choice;
+	private int choiceSelected;
+	private int choiceScroll;
+	private final List<Integer> pendingModifiers = new ArrayList<>();
+	private record ChoiceEdit(BlockInstance block, BlockLayout.ParamBox anchor) {}
+	private record ChoiceBounds(int x, int y, int width, int rows, int rowHeight) {}
+	private static final int[] MODIFIER_KEYS = {
+			InputConstants.KEY_LCONTROL, InputConstants.KEY_RCONTROL,
+			InputConstants.KEY_LSHIFT, InputConstants.KEY_RSHIFT,
+			InputConstants.KEY_LALT, InputConstants.KEY_RALT,
+			InputConstants.KEY_LGUI, InputConstants.KEY_RGUI
+	};
 
 	public ScriptCanvasWidget(Font font, Consumer<DragState> dragStarter) {
 		this.font = font;
@@ -142,6 +155,7 @@ public final class ScriptCanvasWidget {
 				? BlockLayout.hitTest(layout.nodes, toContentX(mouseX), toContentY(mouseY))
 				: null;
 		BlockRenderer.drawStack(graphics, font, layout.nodes, hovered, edit);
+		if (choice != null) renderChoice(graphics, toContentX(mouseX), toContentY(mouseY));
 
 		if (drag != null && contains(mouseX, mouseY)) {
 			int aimX = toContentX(mouseX);
@@ -180,12 +194,24 @@ public final class ScriptCanvasWidget {
 	/** @return true if the click was consumed. */
 	public boolean mouseClicked(MouseButtonEvent event) {
 		rebuild();
+		if (choice != null) {
+			ChoiceBounds bounds = choiceBounds();
+			int cx = toContentX(event.x());
+			int cy = toContentY(event.y());
+			if (contains(event.x(), event.y()) && cx >= bounds.x() && cx < bounds.x() + bounds.width()
+					&& cy >= bounds.y() && cy < bounds.y() + bounds.rows() * bounds.rowHeight()
+					&& event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
+				int index = choiceScroll + (cy - bounds.y()) / bounds.rowHeight();
+				choice.block().setArg(choice.anchor().spec.id(), choice.anchor().spec.choices().get(index));
+			}
+			choice = null;
+			return true;
+		}
 
 		// An open capture takes the click as its value, the same way it takes a
 		// keypress — this is what lets one block cover the mouse and the keyboard.
 		if (edit != null && edit.capturing()) {
-			edit.block().setArg(edit.paramId(),
-					nameOf(InputConstants.Type.MOUSE.getOrCreate(event.button())));
+			edit.block().setArg(edit.paramId(), capturedName(InputConstants.Type.MOUSE.getOrCreate(event.button())));
 			edit = null;
 			return true;
 		}
@@ -221,6 +247,14 @@ public final class ScriptCanvasWidget {
 	}
 
 	private void openParam(BlockInstance block, BlockLayout.ParamBox param) {
+		if (param.spec.kind() == ParamSpec.Kind.CHOICE) {
+			if (param.spec.choices().isEmpty()) return;
+			choice = new ChoiceEdit(block, param);
+			choiceSelected = Math.max(0, param.spec.choices().indexOf(block.arg(param.spec.id())));
+			choiceScroll = 0;
+			keepChoiceVisible();
+			return;
+		}
 		if (param.spec.acceptsOnlyBoolean()) {
 			// Nothing to type into a condition — it is filled by dropping a hexagon.
 			return;
@@ -229,6 +263,7 @@ public final class ScriptCanvasWidget {
 			// A null field marks the param as waiting for a keypress. Typing a key
 			// name by hand is what made "space" and "left.shift" so easy to get wrong.
 			edit = new BlockRenderer.EditTarget(block, param.spec.id(), null);
+			pendingModifiers.clear();
 		} else {
 			edit = new BlockRenderer.EditTarget(block, param.spec.id(),
 					new InlineTextField(param.spec, block.arg(param.spec.id())));
@@ -296,6 +331,11 @@ public final class ScriptCanvasWidget {
 	}
 
 	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+		if (choice != null) {
+			choiceScroll = Math.clamp(choiceScroll - (int) Math.signum(amount), 0,
+					Math.max(0, choice.anchor().spec.choices().size() - choiceBounds().rows()));
+			return true;
+		}
 		if (!Double.isFinite(amount) || amount == 0) return true;
 		double nextZoom = Math.clamp(zoom * Math.pow(1.1, amount), 0.5, 2.0);
 		// Keep the content under the cursor stationary while its scale changes.
@@ -317,6 +357,20 @@ public final class ScriptCanvasWidget {
 
 		int aimX = toContentX(mouseX);
 		int aimY = toContentY(mouseY);
+		BlockLayout.DropTarget target = nearestTarget(drag, aimX);
+		if (drag.isEvent() && target != null) {
+			ScriptStack root = stacks.stream().filter(stack -> stack.blocks() == target.list).findFirst().orElseThrow();
+			List<BlockInstance> joined = new ArrayList<>(drag.blocks());
+			joined.addAll(root.blocks());
+			stacks.set(stacks.indexOf(root), new ScriptStack(root.x(), root.y() - eventAdvance(drag), joined));
+			pruneEmptyStacks();
+			return;
+		}
+		if (drag.isEvent() && overStackBody(aimX, aimY)) {
+			drag.restore();
+			pruneEmptyStacks();
+			return;
+		}
 
 		BlockLayout.SlotTarget slot = nearestSlot(drag, aimX, aimY);
 		if (slot != null) {
@@ -333,7 +387,6 @@ public final class ScriptCanvasWidget {
 			return;
 		}
 
-		BlockLayout.DropTarget target = nearestTarget(drag, aimX);
 		if (target != null) {
 			target.list.addAll(Math.min(target.index, target.list.size()), drag.blocks());
 		} else {
@@ -352,6 +405,7 @@ public final class ScriptCanvasWidget {
 	 * wide blocks remain easy to connect regardless of where they were grabbed.
 	 */
 	private BlockLayout.DropTarget nearestTarget(DragState drag, int contentX) {
+		if (drag.isEvent()) return nearestEventTarget(drag, contentX);
 		if (layout == null || layout.targets.isEmpty()) {
 			return null;
 		}
@@ -368,6 +422,41 @@ public final class ScriptCanvasWidget {
 			}
 		}
 		return best;
+	}
+
+	private int eventAdvance(DragState drag) {
+		return BlockLayout.stackHeight(BlockLayout.compute(drag.blocks(), 0, 0, font).nodes);
+	}
+
+	private BlockLayout.DropTarget nearestEventTarget(DragState drag, int contentX) {
+		if (layout == null) return null;
+		BlockLayout.DropTarget best = null;
+		double bestDistance = STACK_SNAP_RADIUS / zoom;
+		int headerX = toContentX(drag.screenX());
+		int connectorY = toContentY(drag.screenY()) + eventAdvance(drag);
+		int pointerY = toContentY(drag.screenY()) + drag.grabOffsetY();
+		for (BlockLayout.DropTarget target : layout.targets) {
+			if (target.index != 0 || target.list.isEmpty()) continue;
+			var firstType = target.list.getFirst().type();
+			if (firstType != null && (firstType.isEvent() || firstType.isReporter())) continue;
+			if (stacks.stream().noneMatch(stack -> stack.blocks() == target.list)) continue;
+			if (pointerY > target.y + BlockLayout.STACK_OVERLAP && overStackBody(contentX, pointerY)) continue;
+			double distance = Math.min(target.distanceTo(contentX, connectorY), target.distanceTo(headerX, connectorY));
+			if (distance < bestDistance) {
+				bestDistance = distance;
+				best = target;
+			}
+		}
+		return best;
+	}
+
+	private boolean overStackBody(int contentX, int contentY) {
+		if (BlockLayout.hitTest(layout.nodes, contentX, contentY) != null) return true;
+		for (BlockLayout.Node node : layout.nodes) {
+			if (contentX >= node.x && contentX < node.x + node.headerWidth
+					&& contentY >= node.y && contentY < node.y + node.height) return true;
+		}
+		return false;
 	}
 
 	/**
@@ -422,17 +511,34 @@ public final class ScriptCanvasWidget {
 	// --- inline editing -------------------------------------------------
 
 	public boolean keyPressed(KeyEvent event) {
+		if (choice != null) {
+			if (event.key() == InputConstants.KEY_ESCAPE) {
+				choice = null;
+			} else if (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_NUMPADENTER) {
+				choice.block().setArg(choice.anchor().spec.id(), choice.anchor().spec.choices().get(choiceSelected));
+				choice = null;
+			} else if (event.key() == InputConstants.KEY_UP || event.key() == InputConstants.KEY_DOWN) {
+				choiceSelected = Math.clamp(choiceSelected + (event.key() == InputConstants.KEY_UP ? -1 : 1),
+						0, choice.anchor().spec.choices().size() - 1);
+				keepChoiceVisible();
+			}
+			return true;
+		}
 		if (edit == null) {
 			return false;
 		}
 		// A key slot takes the next press as its value — including enter, which
 		// would otherwise close a text field.
 		if (edit.capturing()) {
+			if (supportsCombination(edit.block()) && isModifier(event.key())) {
+				if (!pendingModifiers.contains(event.key())) pendingModifiers.add(event.key());
+				return true;
+			}
 			if (event.key() != InputConstants.KEY_ESCAPE) {
-				edit.block().setArg(edit.paramId(),
-						nameOf(InputConstants.Type.KEYBOARD.getOrCreate(event.key())));
+				edit.block().setArg(edit.paramId(), capturedName(InputConstants.Type.KEYBOARD.getOrCreate(event.key())));
 			}
 			edit = null;
+			pendingModifiers.clear();
 			return true;
 		}
 		if (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_NUMPADENTER
@@ -458,11 +564,26 @@ public final class ScriptCanvasWidget {
 	}
 
 	public boolean charTyped(CharacterEvent event) {
-		return edit != null && !edit.capturing() && edit.field().charTyped(event);
+		return choice != null || edit != null && !edit.capturing() && edit.field().charTyped(event);
+	}
+
+	public boolean keyReleased(KeyEvent event) {
+		if (edit == null || !edit.capturing() || !supportsCombination(edit.block())
+				|| !pendingModifiers.contains(event.key())) return false;
+		List<String> names = new ArrayList<>();
+		for (int modifier : MODIFIER_KEYS) {
+			if (pendingModifiers.contains(modifier)) names.add(nameOf(InputConstants.Type.KEYBOARD.getOrCreate(modifier)));
+		}
+		edit.block().setArg(edit.paramId(), String.join(" + ", names));
+		edit = null;
+		pendingModifiers.clear();
+		return true;
 	}
 
 	/** Writes the open editor's text back into the block and closes it. */
 	public void commitEdit() {
+		choice = null;
+		pendingModifiers.clear();
 		if (edit != null) {
 			if (!edit.capturing()) {
 				Minecraft.getInstance().textInputManager().onTextInputFocusChange(this, false);
@@ -470,6 +591,77 @@ public final class ScriptCanvasWidget {
 			}
 			edit = null;
 		}
+	}
+
+	public boolean choiceOpen() { return choice != null; }
+
+	private ChoiceBounds choiceBounds() {
+		int rowHeight = font.lineHeight + 6;
+		int rows = Math.max(1, Math.min(choice.anchor().spec.choices().size(), (int) (height / zoom) / rowHeight));
+		int menuWidth = choice.anchor().width;
+		for (String option : choice.anchor().spec.choices()) menuWidth = Math.max(menuWidth, font.width(option) + 12);
+		menuWidth = Math.max(1, Math.min(menuWidth, (int) (width / zoom)));
+		int minX = (int) Math.ceil(scrollX);
+		int maxX = (int) Math.floor(scrollX + width / zoom) - menuWidth;
+		int minY = (int) Math.ceil(scrollY);
+		int maxY = (int) Math.floor(scrollY + height / zoom) - rows * rowHeight;
+		int menuY = choice.anchor().y + choice.anchor().height;
+		if (menuY > maxY) menuY = choice.anchor().y - rows * rowHeight;
+		return new ChoiceBounds(Math.clamp(choice.anchor().x, minX, Math.max(minX, maxX)),
+				Math.clamp(menuY, minY, Math.max(minY, maxY)), menuWidth, rows, rowHeight);
+	}
+
+	private void keepChoiceVisible() {
+		int rows = choiceBounds().rows();
+		choiceScroll = Math.clamp(choiceScroll, Math.max(0, choiceSelected - rows + 1), choiceSelected);
+	}
+
+	private void renderChoice(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+		ChoiceBounds bounds = choiceBounds();
+		graphics.nextStratum();
+		graphics.fill(bounds.x(), bounds.y(), bounds.x() + bounds.width(),
+				bounds.y() + bounds.rows() * bounds.rowHeight(), Theme.PARAM_FILL);
+		for (int row = 0; row < bounds.rows(); row++) {
+			int option = choiceScroll + row;
+			int top = bounds.y() + row * bounds.rowHeight();
+			if (option == choiceSelected || mouseX >= bounds.x() && mouseX < bounds.x() + bounds.width()
+					&& mouseY >= top && mouseY < top + bounds.rowHeight()) {
+				graphics.fill(bounds.x(), top, bounds.x() + bounds.width(), top + bounds.rowHeight(), Theme.ROW_SELECTED);
+			}
+			graphics.text(font, font.plainSubstrByWidth(choice.anchor().spec.choices().get(option), Math.max(1, bounds.width() - 8)),
+					bounds.x() + 4, BlockLayout.textTop(top, bounds.rowHeight(), font), Theme.PARAM_TEXT);
+		}
+		graphics.outline(bounds.x(), bounds.y(), bounds.width(), bounds.rows() * bounds.rowHeight(), Theme.PARAM_FOCUSED);
+	}
+
+	static boolean supportsCombination(BlockInstance block) {
+		String id = block.typeId();
+		return id.startsWith("events.") || id.startsWith("input.is_") || id.startsWith("input.was_")
+				|| id.equals("control.wait_next_press");
+	}
+
+	static boolean isModifier(int key) {
+		for (int modifier : MODIFIER_KEYS) if (key == modifier) return true;
+		return false;
+	}
+
+	private String capturedName(InputConstants.Key key) {
+		List<Integer> modifiers = new ArrayList<>();
+		if (supportsCombination(edit.block())) {
+			for (int modifier : MODIFIER_KEYS) {
+				if (InputConstants.isKeyDown(modifier)) modifiers.add(modifier);
+			}
+		}
+		return combinationName(key, modifiers);
+	}
+
+	static String combinationName(InputConstants.Key key, List<Integer> modifiers) {
+		List<String> names = new ArrayList<>();
+		for (int modifier : MODIFIER_KEYS) {
+			if (modifiers.contains(modifier)) names.add(nameOf(InputConstants.Type.KEYBOARD.getOrCreate(modifier)));
+		}
+		names.add(nameOf(key));
+		return String.join(" + ", names);
 	}
 
 }

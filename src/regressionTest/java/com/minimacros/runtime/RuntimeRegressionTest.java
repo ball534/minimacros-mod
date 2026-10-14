@@ -11,6 +11,8 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 /** Exercises the actual interpreter without launching a Minecraft client. */
 public final class RuntimeRegressionTest {
@@ -21,7 +23,238 @@ public final class RuntimeRegressionTest {
 		loopAndBudget();
 		stoppedTurnDoesNotRun();
 		sharedInputOwnership();
+		physicalSnapshot();
+		pressModes();
+		releaseAndSharedVariables();
+		heldEvents();
+		automaticEventsAndPanic();
+		enabledLifecycleAndCapacity();
+		inputWaits();
 		System.out.println("Runtime regression checks passed");
+	}
+
+	private static void physicalSnapshot() {
+		PhysicalInput input = new PhysicalInput();
+		input.update(Set.of(), true);
+		input.update(keys("left.control", "r", "mouse.right"), true);
+		check(input.pressed("left.control + r") && input.pressed("mouse.right"), "physical combinations did not press");
+		check(input.pressed("left.control + r"), "one listener consumed another listener's edge");
+		input.update(keys("left.control", "r"), false);
+		check(!input.held("r") && !input.released("mouse.right"), "screen input leaked into gameplay predicates");
+		input.update(keys("left.control", "r"), true);
+		check(input.held("r") && !input.pressed("r"), "closing a screen manufactured a press");
+		input.update(Set.of(), true);
+		check(input.released("left.control + r"), "physical combination did not release");
+		KeyMapping.set(InputSimulator.resolveKey("w"), true);
+		check(!input.held("w") && !input.pressed("w"), "simulated key mappings changed physical input");
+		KeyMapping.set(InputSimulator.resolveKey("w"), false);
+	}
+
+	private static void pressModes() throws Exception {
+		for (String mode : List.of("run once", "restart", "toggle")) {
+			Harness harness = new Harness();
+			BlockInstance hat = event(BlockRegistry.WHEN_PRESSED, "r");
+			hat.setArg("mode", mode);
+			ScriptStack stack = harness.stack(hat, increment("runs"), sleep(100));
+			harness.tick();
+			harness.tick("r");
+			check(harness.value("runs").equals(1.0), "press did not start " + mode);
+			harness.tick("r");
+			check(harness.value("runs").equals(1.0), "held key repeatedly triggered " + mode);
+			harness.tick();
+			harness.tick("r");
+			check(harness.value("runs").equals("restart".equals(mode) ? 2.0 : 1.0), "incorrect second-press behavior for " + mode);
+			check(harness.running(stack) != "toggle".equals(mode), "incorrect execution state for " + mode);
+			harness.runner.reset();
+		}
+	}
+
+	private static void releaseAndSharedVariables() throws Exception {
+		Harness harness = new Harness();
+		harness.stack(event(BlockRegistry.WHEN_RELEASED, "mouse.right"), assign("released", "1"));
+		harness.stack(event(BlockRegistry.WHEN_PRESSED, "left.control + r"), assign("shared", "7"));
+		harness.stack(event(BlockRegistry.WHEN_PRESSED, "left.control + r"), assign("read", "shared"));
+		harness.stack(assign("plain", "1"));
+		harness.tick();
+		harness.tick("mouse.right");
+		check(harness.value("released") == Values.NONE, "release event fired on press");
+		harness.tick();
+		check(harness.value("released").equals(1.0), "release event did not fire");
+		harness.tick("left.control", "r");
+		check(harness.value("read").equals(7.0), "event stacks did not share macro variables");
+		check(harness.value("plain") == Values.NONE, "plain stack ran without an event");
+		harness.tick(false, false, "r");
+		harness.tick("r");
+		check(!harness.input.pressed("r"), "returning from screen produced a new edge");
+	}
+
+	private static void heldEvents() throws Exception {
+		Harness harness = new Harness();
+		ScriptStack stack = harness.stack(event(BlockRegistry.WHILE_HELD, "r"), increment("runs"), sleep(100));
+		harness.tick();
+		harness.tick("r");
+		check(harness.running(stack), "held event did not start");
+		harness.tick();
+		check(!harness.running(stack), "held event did not stop immediately on release");
+		harness.tick("r");
+		check(harness.value("runs").equals(2.0), "new hold did not start a fresh body");
+		harness.tick(false, false, "r");
+		harness.tick("r");
+		check(!harness.running(stack), "held event resumed a key held across a screen");
+		harness.tick();
+		harness.tick("r");
+		check(harness.value("runs").equals(3.0), "held event failed to rearm after a screen");
+		harness.runner.reset();
+
+		Harness repeating = new Harness();
+		repeating.stack(event(BlockRegistry.WHILE_HELD, "r"), increment("runs"));
+		repeating.tick();
+		repeating.tick("r");
+		repeating.tick("r");
+		check(repeating.value("runs").equals(2.0), "completed held body did not repeat once per tick");
+	}
+
+	private static void automaticEventsAndPanic() throws Exception {
+		Harness harness = new Harness();
+		harness.stack(event(BlockRegistry.WHEN_ENABLED, ""), increment("enabled"));
+		BlockInstance every = event(BlockRegistry.EVERY, "");
+		every.setArg("seconds", "0.1");
+		harness.stack(every, increment("periodic"));
+		harness.stack(event(BlockRegistry.WHEN_PRESSED, "r"), increment("manual"));
+		harness.tick();
+		check(harness.value("enabled").equals(1.0) && harness.value("periodic") == Values.NONE,
+				"enable/periodic initial timing is wrong");
+		harness.tick();
+		harness.tick();
+		check(harness.value("enabled").equals(1.0) && harness.value("periodic").equals(1.0),
+				"periodic interval or one-shot enable is wrong");
+		harness.tick(true, true);
+		harness.tick();
+		harness.tick("r");
+		harness.tick();
+		harness.tick();
+		check(harness.value("manual").equals(1.0), "panic prevented a new manual gesture");
+		check(harness.value("enabled").equals(1.0) && harness.value("periodic").equals(1.0),
+				"automatic events immediately resumed after panic");
+		harness.macro.setEnabled(false);
+		harness.tick();
+		check(harness.value("enabled") == Values.NONE, "disabling a macro retained its variables");
+		harness.macro.setEnabled(true);
+		harness.tick();
+		harness.tick();
+		harness.tick();
+		check(harness.value("enabled").equals(1.0) && harness.value("periodic").equals(1.0),
+				"disable/re-enable failed to rearm automatic events");
+	}
+
+	private static void inputWaits() throws Exception {
+		Harness held = new Harness();
+		BlockInstance waitUntil = BlockInstance.create(BlockRegistry.get(BlockRegistry.WAIT_UNTIL));
+		BlockInstance predicate = BlockInstance.create(BlockRegistry.get("input.is_held"));
+		predicate.setArg("button", "mouse.right");
+		waitUntil.setInput("condition", predicate);
+		held.stack(event(BlockRegistry.WHEN_ENABLED, ""), waitUntil, assign("after", "1"));
+		held.tick();
+		held.tick();
+		check(held.value("after") == Values.NONE, "wait until advanced while false");
+		held.tick("mouse.right");
+		check(held.value("after").equals(1.0), "wait until failed to re-evaluate physical input");
+
+		Harness next = new Harness();
+		BlockInstance waitPress = BlockInstance.create(BlockRegistry.get(BlockRegistry.WAIT_NEXT_PRESS));
+		waitPress.setArg("button", "r");
+		next.stack(event(BlockRegistry.WHEN_PRESSED, "r"), waitPress, assign("after", "1"));
+		next.tick();
+		next.tick("r");
+		next.tick("r");
+		check(next.value("after") == Values.NONE, "wait for press consumed its triggering/already-held press");
+		next.tick(false, false);
+		next.tick(false, false, "r");
+		next.tick("r");
+		check(next.value("after") == Values.NONE, "wait for press consumed a screen gesture");
+		next.tick();
+		next.tick("r");
+		check(next.value("after").equals(1.0), "wait for press did not resume on a fresh press");
+	}
+
+	private static void enabledLifecycleAndCapacity() throws Exception {
+		Harness resumed = new Harness();
+		resumed.stack(event(BlockRegistry.WHEN_ENABLED, ""), increment("enabled"));
+		resumed.tick();
+		resumed.input.update(Set.of(), false);
+		resumed.runner.tick(List.of(resumed.macro), resumed.input, false, false, false);
+		resumed.tick();
+		check(resumed.value("enabled").equals(1.0), "temporary focus/pause/editor suspension retriggered When enabled");
+
+		Harness capacity = new Harness();
+		for (int i = 0; i < 17; i++) {
+			capacity.stack(event(BlockRegistry.WHEN_ENABLED, ""), increment("started"), sleep(2));
+		}
+		capacity.tick();
+		check(capacity.value("started").equals(16.0), "execution capacity did not bound concurrent starts");
+		capacity.tick();
+		capacity.tick();
+		check(capacity.value("started").equals(17.0), "capacity discarded a pending When enabled event");
+		capacity.tick();
+		capacity.tick();
+		check(capacity.value("started").equals(17.0), "enabled events fired more than once while draining capacity");
+		capacity.runner.reset();
+	}
+
+	private static BlockInstance event(String type, String button) {
+		BlockInstance block = BlockInstance.create(BlockRegistry.get(type));
+		block.setArg("button", button);
+		return block;
+	}
+
+	private static BlockInstance increment(String variable) {
+		BlockInstance add = BlockInstance.create(BlockRegistry.get("vars.op.add"));
+		BlockInstance read = BlockInstance.create(BlockRegistry.get(BlockRegistry.VARIABLE));
+		read.setArg("name", variable);
+		add.setInput("a", read);
+		add.setArg("b", "1");
+		BlockInstance assignment = assign(variable, "");
+		assignment.setInput("b", add);
+		return assignment;
+	}
+
+	private static Set<InputConstants.Key> keys(String... names) {
+		return Arrays.stream(names).map(InputSimulator::resolveKey).collect(Collectors.toSet());
+	}
+
+	private static final class Harness {
+		private final MacroRunner runner = new MacroRunner();
+		private final PhysicalInput input = new PhysicalInput();
+		private final MacroDefinition macro = new MacroDefinition("Events regression");
+
+		private ScriptStack stack(BlockInstance... blocks) {
+			ScriptStack stack = new ScriptStack(0, 0, List.of(blocks));
+			macro.stacks().add(stack);
+			return stack;
+		}
+
+		private void tick(String... held) {
+			tick(true, false, held);
+		}
+
+		private void tick(boolean gameplayInput, boolean panic, String... held) {
+			input.update(keys(held), gameplayInput && !panic);
+			runner.tick(List.of(macro), input, true, gameplayInput, panic);
+		}
+
+		private Object state() throws Exception {
+			return ((Map<?, ?>) field(runner, "listeners")).get(macro.id());
+		}
+
+		private Object value(String variable) throws Exception {
+			return ((Map<?, ?>) field(state(), "variables")).getOrDefault(variable, null) == null
+					? Values.NONE : ((Map<?, ?>) field(state(), "variables")).get(variable);
+		}
+
+		private boolean running(ScriptStack stack) throws Exception {
+			Object event = ((Map<?, ?>) field(state(), "events")).get(stack);
+			return event != null && field(event, "execution") != null;
+		}
 	}
 
 	private static void waitTicks(int ticks) throws Exception {

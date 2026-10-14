@@ -182,7 +182,12 @@ public final class BlockLayout {
 		}
 
 		public boolean headerContains(int px, int py) {
-			return px >= x && px < x + headerWidth && py >= y && py < y + headerHeight;
+			if (px < x || px >= x + headerWidth || py < y || py >= y + headerHeight) return false;
+			if (block.type() != null && block.type().isEvent()) {
+				if (py < y + 3) return px >= x + 9 && px < x + 43;
+				if (py < y + 6) return px >= x + 5 && px < x + 47;
+			}
+			return true;
 		}
 
 		/** Shifts this node and everything inside it. */
@@ -266,7 +271,9 @@ public final class BlockLayout {
 
 		for (int i = 0; i < list.size(); i++) {
 			Node node = layoutBlock(list.get(i), list, i, null, null, x, cursorY, font, out);
-			out.targets.add(new DropTarget(list, i, x, cursorY, node.headerWidth));
+			if (node.block.type() == null || !node.block.type().isEvent()) {
+				out.targets.add(new DropTarget(list, i, x, cursorY, node.headerWidth));
+			}
 			nodes.add(node);
 			cursorY += stackAdvance(node);
 		}
@@ -362,15 +369,16 @@ public final class BlockLayout {
 			}
 		}
 
-		node.headerHeight = Math.max(HEADER_HEIGHT, tallest);
+		int hatHeight = type.isEvent() ? 6 : 0;
+		node.headerHeight = Math.max(HEADER_HEIGHT, tallest) + hatHeight;
 		node.headerWidth = Math.max(MIN_HEADER_WIDTH, cursorX - node.x - GAP + PAD_X + point);
 
 		// Second pass: centre each piece vertically in the finished header.
-		int textY = textTop(node.y, node.headerHeight, font);
+		int textY = textTop(node.y + hatHeight, node.headerHeight - hatHeight, font);
 		node.textParts.replaceAll(part -> new TextPart(part.text(), part.x(), textY));
 
 		for (ParamBox param : node.params) {
-			int centredY = node.y + (node.headerHeight - param.height) / 2;
+			int centredY = node.y + hatHeight + (node.headerHeight - hatHeight - param.height) / 2;
 			int delta = centredY - param.y;
 			if (param.nested != null) {
 				param.nested.translate(0, delta);
@@ -415,6 +423,7 @@ public final class BlockLayout {
 	/** Same padding either side of the text, so it reads as centred in the field. */
 	public static int paramWidth(Font font, ParamSpec spec, String value) {
 		int textWidth = font.width(value == null ? "" : value);
+		if (spec.kind() == ParamSpec.Kind.CHOICE) textWidth += 10;
 		return Math.max(spec.minWidth(), textWidth + PARAM_PAD_X * 2);
 	}
 

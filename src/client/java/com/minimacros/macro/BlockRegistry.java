@@ -22,6 +22,14 @@ public final class BlockRegistry {
 	public static final String LOOP = "control.loop";
 	public static final String WHILE = "control.while";
 	public static final String IF_ELSE = "control.if_else";
+	public static final String WAIT_UNTIL = "control.wait_until";
+	public static final String WAIT_NEXT_PRESS = "control.wait_next_press";
+
+	public static final String WHEN_PRESSED = "events.when_pressed";
+	public static final String WHEN_RELEASED = "events.when_released";
+	public static final String WHILE_HELD = "events.while_held";
+	public static final String WHEN_ENABLED = "events.when_enabled";
+	public static final String EVERY = "events.every";
 
 	public static final String ASSIGN = "vars.assign";
 	public static final String VARIABLE = "vars.variable";
@@ -32,9 +40,8 @@ public final class BlockRegistry {
 
 	private static final Map<String, BlockType> TYPES = new LinkedHashMap<>();
 	/**
-	 * The registry never changes after class init, so the palette — which rebuilds
-	 * its shelf every frame — gets one shared list rather than a fresh copy each
-	 * time it asks.
+	 * The registry never changes after class initialization, so all callers share
+	 * one immutable list rather than creating copies on lookup.
 	 */
 	private static final List<BlockType> ALL;
 
@@ -67,7 +74,9 @@ public final class BlockRegistry {
 	// Declared after every constant it reads: static initialisers run in
 	// textual order, so a constant below this block would still be null here.
 	static {
+		registerEvents();
 		registerInput();
+		registerInputPredicates();
 		registerControl();
 		registerMessages();
 		registerVariables();
@@ -147,6 +156,35 @@ public final class BlockRegistry {
 				.build());
 	}
 
+	// --- Events ----------------------------------------------------------
+
+	private static void registerEvents() {
+		register(BlockType.builder(WHEN_PRESSED, BlockCategory.EVENTS, "When %s is pressed %s")
+				.params(ParamSpec.key("button"),
+						ParamSpec.choice("mode", "run once", List.of("run once", "restart", "toggle")))
+				.event()
+				.build());
+
+		register(BlockType.builder(WHEN_RELEASED, BlockCategory.EVENTS, "When %s is released")
+				.params(ParamSpec.key("button"))
+				.event()
+				.build());
+
+		register(BlockType.builder(WHILE_HELD, BlockCategory.EVENTS, "While %s is held")
+				.params(ParamSpec.key("button"))
+				.event()
+				.build());
+
+		register(BlockType.builder(WHEN_ENABLED, BlockCategory.EVENTS, "When this macro is enabled")
+				.event()
+				.build());
+
+		register(BlockType.builder(EVERY, BlockCategory.EVENTS, "Every %s seconds")
+				.params(ParamSpec.number("seconds", "5"))
+				.event()
+				.build());
+	}
+
 	// --- Control --------------------------------------------------------
 
 	private static void registerControl() {
@@ -171,6 +209,14 @@ public final class BlockRegistry {
 		register(BlockType.builder(IF_ELSE, BlockCategory.CONTROL, "if %s")
 				.params(ParamSpec.booleanSlot("condition"))
 				.branches("", "else")
+				.build());
+
+		register(BlockType.builder(WAIT_UNTIL, BlockCategory.CONTROL, "wait until %s")
+				.params(ParamSpec.booleanSlot("condition"))
+				.build());
+
+		register(BlockType.builder(WAIT_NEXT_PRESS, BlockCategory.CONTROL, "wait for next press of %s")
+				.params(ParamSpec.keySlot("button"))
 				.build());
 	}
 
@@ -280,6 +326,23 @@ public final class BlockRegistry {
 		// the number this reports is the one buttonDown takes to select that slot.
 		register(BlockType.builder("player.selected_item_slot", BlockCategory.VARIABLES, "selectedItemSlot")
 				.reporter(ofPlayer(player -> (double) (player.getInventory().getSelectedSlot() + 1)))
+				.build());
+	}
+
+	private static void registerInputPredicates() {
+		register(BlockType.builder("input.is_held", BlockCategory.INPUT, "%s is held")
+				.params(ParamSpec.keySlot("button"))
+				.predicate((block, ctx) -> ctx.inputHeld(Values.display(ctx.resolve(block, "button"))))
+				.build());
+
+		register(BlockType.builder("input.was_pressed", BlockCategory.INPUT, "%s was pressed this tick")
+				.params(ParamSpec.keySlot("button"))
+				.predicate((block, ctx) -> ctx.inputPressed(Values.display(ctx.resolve(block, "button"))))
+				.build());
+
+		register(BlockType.builder("input.was_released", BlockCategory.INPUT, "%s was released this tick")
+				.params(ParamSpec.keySlot("button"))
+				.predicate((block, ctx) -> ctx.inputReleased(Values.display(ctx.resolve(block, "button"))))
 				.build());
 	}
 

@@ -2,6 +2,8 @@ package com.minimacros.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.ExclusionStrategy;
+import com.google.gson.FieldAttributes;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import com.minimacros.MiniMacrosClient;
@@ -18,8 +20,22 @@ import java.util.List;
 
 /** Loads and saves every macro to {@code config/mini-macros/macros.json}. */
 public final class MacroStorage {
-	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-	private static final int FORMAT_VERSION = 2;
+	private static final Gson GSON = new GsonBuilder()
+			.setPrettyPrinting()
+			.addSerializationExclusionStrategy(new ExclusionStrategy() {
+				@Override
+				public boolean shouldSkipField(FieldAttributes field) {
+					return field.getDeclaringClass() == MacroDefinition.class
+							&& (field.getName().equals("keyCode") || field.getName().equals("modifierKeys"));
+				}
+
+				@Override
+				public boolean shouldSkipClass(Class<?> type) {
+					return false;
+				}
+			})
+			.create();
+	private static final int FORMAT_VERSION = 3;
 
 	private static final Path FILE = FabricLoader.getInstance()
 			.getConfigDir()
@@ -65,6 +81,7 @@ public final class MacroStorage {
 			if (!object.has("keyFormat")) {
 				macro.migrateLegacyKeybind();
 			}
+			macro.migrateLegacyKeybindToEvents();
 			return macro;
 		} catch (JsonSyntaxException | NullPointerException e) {
 			return null;
@@ -84,6 +101,9 @@ public final class MacroStorage {
 				macro.normalize();
 				if (parsed.version < 2) {
 					macro.migrateLegacyKeybind();
+				}
+				if (parsed.version < 3) {
+					macro.migrateLegacyKeybindToEvents();
 				}
 			}
 		} catch (IOException | JsonSyntaxException e) {

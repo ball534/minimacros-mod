@@ -5,6 +5,7 @@ package com.minimacros.macro;
  * at a glance before the label is even read.
  */
 public enum BlockCategory {
+	EVENTS("Events", 0xFF594638, 0xFFD19A68),
 	INPUT("Input", 0xFF344D6A, 0xFF82AFE5),
 	CONTROL("Control", 0xFF604921, 0xFFD6AD5C),
 	MESSAGES("Messages", 0xFF304B47, 0xFF74C7B2),

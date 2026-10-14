@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 
 /**
  * The saved-macro list down the left edge, laid out like one of vanilla's own
- * option lists. Each row selects a macro and shows the key that runs it; the
+ * option lists. Each row selects a macro; the
  * checkbox on its right arms or disarms that macro without opening it.
  */
 public final class MacroListWidget {
@@ -153,18 +153,12 @@ public final class MacroListWidget {
 		Panels.checkbox(graphics, boxX, boxY, boxSize, macro.enabled(),
 				hovered && mouseX >= boxX && mouseX < boxX + boxSize);
 
-		// Name over the key that runs it: the pair is what identifies a macro at a
-		// glance, and the key is the part you cannot recover from the name.
 		int textLeft = left + INSET;
 		int available = boxX - textLeft - INSET;
-		int block = font.lineHeight * 2 + 1;
-		int textY = rowY + (ROW_HEIGHT - block) / 2;
+		int textY = rowY + (ROW_HEIGHT - font.lineHeight) / 2;
 
 		graphics.text(font, font.plainSubstrByWidth(macro.name(), available), textLeft, textY, Theme.TEXT);
 
-		String key = macro.keyDisplayName().getString();
-		graphics.text(font, font.plainSubstrByWidth(key, available), textLeft,
-				textY + font.lineHeight + 1, Theme.TEXT_MUTED);
 	}
 
 	public boolean mouseClicked(MouseButtonEvent event) {

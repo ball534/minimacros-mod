@@ -13,6 +13,8 @@ public final class MacroDataRegressionTest {
 		normalizesNullMacroDataAndPreservesBranches();
 		deepCopiesAreIndependent();
 		migratesLegacyBlocks();
+		migratesLegacyBindingsToEvents();
+		eventAndChoiceSpecsAreRegistered();
 	}
 
 	private static void normalizesNullMacroDataAndPreservesBranches() {
@@ -84,6 +86,83 @@ public final class MacroDataRegressionTest {
 		check("6".equals(operation.arg("a")) && "7".equals(operation.arg("b")),
 				"legacy operation operands were not preserved");
 		check(operation.arg("op").isEmpty(), "legacy operation selector was not removed");
+	}
+
+	private static void migratesLegacyBindingsToEvents() {
+		MacroDefinition glfwMacro = GSON.fromJson("""
+				{
+				  "keyCode": 82,
+				  "modifierKeys": [341],
+				  "stacks": [
+				    {"blocks": [{"type":"messages.print","args":{"text":"one"}}]},
+				    {"blocks": [{"type":"messages.print","args":{"text":"two"}}]}
+				  ]
+				}
+				""", MacroDefinition.class);
+		glfwMacro.normalize();
+		glfwMacro.migrateLegacyKeybind();
+		glfwMacro.migrateLegacyKeybindToEvents();
+		assertMigratedTrigger(glfwMacro);
+
+		int firstStackSize = glfwMacro.stacks().getFirst().blocks().size();
+		glfwMacro.migrateLegacyKeybindToEvents();
+		check(glfwMacro.stacks().getFirst().blocks().size() == firstStackSize,
+				"event migration duplicated triggers");
+
+		MacroDefinition sdlMacro = GSON.fromJson("""
+				{
+				  "keyCode": 21,
+				  "modifierKeys": [224],
+				  "stacks": [{"blocks": [{"type":"messages.print"}] }]
+				}
+				""", MacroDefinition.class);
+		sdlMacro.normalize();
+		sdlMacro.migrateLegacyKeybindToEvents();
+		check("left.control + r".equals(sdlMacro.stacks().getFirst().blocks().getFirst().arg("button")),
+				"SDL binding migration changed key or modifier names");
+
+		MacroDefinition eventMacro = GSON.fromJson("""
+				{
+				  "keyCode": 21,
+				  "modifierKeys": [224],
+				  "stacks": [{"blocks": [
+				    {"type":"events.when_released","args":{"button":"q"}},
+				    {"type":"messages.print","args":{"text":"body"}}
+				  ]}]
+				}
+				""", MacroDefinition.class);
+		eventMacro.normalize();
+		eventMacro.migrateLegacyKeybindToEvents();
+		check(eventMacro.stacks().getFirst().blocks().size() == 2,
+				"legacy migration prepended a second event to an already-triggered stack");
+		check(BlockRegistry.WHEN_RELEASED.equals(
+				eventMacro.stacks().getFirst().blocks().getFirst().typeId()),
+				"existing event trigger was replaced");
+	}
+
+	private static void assertMigratedTrigger(MacroDefinition macro) {
+		check(macro.stacks().size() == 2, "legacy macro stacks were changed");
+		for (ScriptStack stack : macro.stacks()) {
+			BlockInstance trigger = stack.blocks().getFirst();
+			check(BlockRegistry.WHEN_PRESSED.equals(trigger.typeId()), "legacy binding did not become an event");
+			check("left.control + r".equals(trigger.arg("button")), "GLFW binding names were not migrated");
+			check("restart".equals(trigger.arg("mode")), "legacy binding did not use restart mode");
+		}
+		check(macro.keyCode() == MacroDefinition.UNBOUND, "legacy keycode was not cleared");
+		check(macro.modifierKeys().isEmpty(), "legacy modifiers were not cleared");
+	}
+
+	private static void eventAndChoiceSpecsAreRegistered() {
+		BlockType pressed = BlockRegistry.get(BlockRegistry.WHEN_PRESSED);
+		check(pressed.isEvent(), "pressed trigger is not an event shape");
+		check(!pressed.isReporter(), "event shape was marked as a reporter");
+		ParamSpec mode = pressed.params().get(1);
+		check(mode.kind() == ParamSpec.Kind.CHOICE, "event mode is not a choice parameter");
+		check(mode.choices().equals(java.util.List.of("run once", "restart", "toggle")),
+				"event mode choices changed");
+		ParamSpec period = BlockRegistry.get(BlockRegistry.EVERY).params().getFirst();
+		check(period.kind() == ParamSpec.Kind.NUMBER && "5".equals(period.defaultValue()),
+				"period event lacks a direct five-second default");
 	}
 
 	private static void check(boolean condition, String message) {

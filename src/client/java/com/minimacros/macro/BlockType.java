@@ -26,7 +26,8 @@ public final class BlockType {
 	public enum Shape {
 		STACK,
 		REPORTER,
-		BOOLEAN
+		BOOLEAN,
+		EVENT
 	}
 
 	@FunctionalInterface
@@ -108,14 +109,19 @@ public final class BlockType {
 		return shape;
 	}
 
-	/** True for anything that reports a value, so it can be plugged into a slot. */
+	/** True for value-producing shapes that can be plugged into a slot. */
 	public boolean isReporter() {
-		return shape != Shape.STACK;
+		return shape == Shape.REPORTER || shape == Shape.BOOLEAN;
 	}
 
 	/** True only for hexagons, which are the sole things a condition slot takes. */
 	public boolean isBoolean() {
 		return shape == Shape.BOOLEAN;
+	}
+
+	/** True for a hat block that starts an event-driven stack. */
+	public boolean isEvent() {
+		return shape == Shape.EVENT;
 	}
 
 	public Action action() {
@@ -169,6 +175,12 @@ public final class BlockType {
 		public Builder predicate(Evaluator evaluator) {
 			this.shape = Shape.BOOLEAN;
 			this.evaluator = evaluator;
+			return this;
+		}
+
+		/** Marks this a hat block that starts an event-driven stack. */
+		public Builder event() {
+			this.shape = Shape.EVENT;
 			return this;
 		}
 

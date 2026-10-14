@@ -80,6 +80,10 @@ public final class DragState {
 		return type != null && type.isBoolean();
 	}
 
+	public boolean isEvent() {
+		return !blocks.isEmpty() && blocks.getFirst().type() != null && blocks.getFirst().type().isEvent();
+	}
+
 	public List<BlockInstance> blocks() {
 		return blocks;
 	}

@@ -38,8 +38,8 @@ public class MiniMacrosClient implements ClientModInitializer {
 		KeyMappingHelper.registerKeyMapping(PANIC);
 
 		ClientTickEvents.END_CLIENT_TICK.register(MiniMacrosClient::onEndClientTick);
-		ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> MacroRunner.get().stopAll());
-		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> MacroRunner.get().stopAll());
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> MacroRunner.get().reset());
+		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> MacroRunner.get().reset());
 
 		LOGGER.info("Mini Macros ready with {} macro(s)", MacroStorage.macros().size());
 	}

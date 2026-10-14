@@ -24,13 +24,18 @@ public final class ExecutionContext {
 
 	private final MacroExecution execution;
 	private final InputSimulator input;
-	private final Map<String, Object> variables = new LinkedHashMap<>();
+	private final Map<String, Object> variables;
 	/** Params already reported as holding a non-count, so a nested loop warns once. */
 	private final Set<String> warnedCounts = new HashSet<>();
 
 	ExecutionContext(MacroExecution execution, InputSimulator input) {
+		this(execution, input, new LinkedHashMap<>());
+	}
+
+	ExecutionContext(MacroExecution execution, InputSimulator input, Map<String, Object> variables) {
 		this.execution = execution;
 		this.input = input;
+		this.variables = variables;
 	}
 
 	public LocalPlayer player() {
@@ -158,6 +163,18 @@ public final class ExecutionContext {
 	}
 
 	// --- input ----------------------------------------------------------
+
+	public boolean inputHeld(String button) {
+		return execution.physicalInput().held(button);
+	}
+
+	public boolean inputPressed(String button) {
+		return execution.physicalInput().pressed(button);
+	}
+
+	public boolean inputReleased(String button) {
+		return execution.physicalInput().released(button);
+	}
 
 	/**
 	 * Holds a key or mouse button down until {@link #keyUp}. With a screen open

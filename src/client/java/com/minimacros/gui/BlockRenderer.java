@@ -54,7 +54,10 @@ public final class BlockRenderer {
 		int border = Theme.BLOCK_BORDER;
 		int accent = type.category().accent();
 
-		if (type.isBoolean()) {
+		if (type.isEvent()) {
+			drawEvent(graphics, node, color, border);
+			drawConnector(graphics, node, color, border);
+		} else if (type.isBoolean()) {
 			drawHexagon(graphics, node.x, node.y, node.x + node.headerWidth,
 					node.y + node.headerHeight, color, accent);
 		} else if (type.isReporter()) {
@@ -171,6 +174,9 @@ public final class BlockRenderer {
 		String shown = font.plainSubstrByWidth(text, available);
 
 		graphics.text(font, shown, textX, textY, capturing ? Theme.TEXT_MUTED : Theme.PARAM_TEXT);
+		if (param.spec.kind() == ParamSpec.Kind.CHOICE) {
+			graphics.text(font, "v", right - BlockLayout.PARAM_PAD_X - 6, textY, Theme.TEXT_MUTED);
+		}
 
 		if (editing && !capturing && edit.field().caretVisible()) {
 			String beforeCaret = text.substring(0, Math.min(edit.field().cursor(), text.length()));
@@ -192,6 +198,33 @@ public final class BlockRenderer {
 		graphics.outline(x1, y1, x2 - x1, y2 - y1, border);
 	}
 
+	private static void drawEvent(GuiGraphicsExtractor graphics, BlockLayout.Node node, int fill, int border) {
+		int bottom = node.y + node.headerHeight - BlockLayout.NOTCH_HEIGHT;
+		graphics.fill(node.x, node.y + 6, node.x + node.headerWidth, bottom, fill);
+		graphics.fill(node.x + 6, node.y + 3, node.x + 46, node.y + 6, fill);
+		graphics.fill(node.x + 10, node.y, node.x + 42, node.y + 3, fill);
+		outlineEvent(graphics, node, border);
+	}
+
+	private static void outlineEvent(GuiGraphicsExtractor graphics, BlockLayout.Node node, int border) {
+		int x = node.x;
+		int y = node.y;
+		int right = x + node.headerWidth;
+		int bottom = y + node.headerHeight - BlockLayout.NOTCH_HEIGHT;
+		graphics.fill(x + 10, y, x + 42, y + 1, border);
+		graphics.fill(x + 9, y, x + 10, y + 3, border);
+		graphics.fill(x + 42, y, x + 43, y + 3, border);
+		graphics.fill(x + 6, y + 3, x + 10, y + 4, border);
+		graphics.fill(x + 42, y + 3, x + 46, y + 4, border);
+		graphics.fill(x + 5, y + 3, x + 6, y + 6, border);
+		graphics.fill(x + 46, y + 3, x + 47, y + 6, border);
+		graphics.fill(x, y + 6, x + 6, y + 7, border);
+		graphics.fill(x + 46, y + 6, right, y + 7, border);
+		graphics.fill(x, y + 6, x + 1, bottom, border);
+		graphics.fill(right - 1, y + 6, right, bottom, border);
+		graphics.fill(x, bottom - 1, right, bottom, border);
+	}
+
 	/**
 	 * Traces the block's own silhouette in {@code color}, on top of whatever has
 	 * already been drawn.
@@ -206,7 +239,10 @@ public final class BlockRenderer {
 		int right = node.x + node.headerWidth;
 		int bottom = node.y + node.headerHeight;
 
-		if (type.isBoolean()) {
+		if (type.isEvent()) {
+			outlineEvent(graphics, node, color);
+			outlineConnector(graphics, node, color);
+		} else if (type.isBoolean()) {
 			outlineHexagon(graphics, node.x, node.y, right, bottom, color);
 		} else if (type.isReporter()) {
 			outlineValueShape(graphics, node.x, node.y, right, bottom, color);
