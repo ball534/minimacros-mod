@@ -104,6 +104,12 @@ public class BlockInstance {
 		if (inputs == null) {
 			inputs = new LinkedHashMap<>();
 		}
+		inputs.values().removeIf(plugged -> plugged == null);
+		for (int i = 0; i < branches.size(); i++) {
+			if (branches.get(i) == null) {
+				branches.set(i, new ArrayList<>());
+			}
+		}
 
 		migrateReplacedBlocks();
 
@@ -121,6 +127,7 @@ public class BlockInstance {
 			plugged.normalize();
 		}
 		for (List<BlockInstance> branch : branches) {
+			branch.removeIf(child -> child == null);
 			for (BlockInstance child : branch) {
 				child.normalize();
 			}

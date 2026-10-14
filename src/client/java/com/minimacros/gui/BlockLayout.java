@@ -18,19 +18,19 @@ import java.util.List;
  * translates to screen coordinates when it draws and when it tests the mouse.
  */
 public final class BlockLayout {
-	public static final int HEADER_HEIGHT = 20;
-	public static final int PAD_X = 6;
+	public static final int HEADER_HEIGHT = 24;
+	public static final int PAD_X = 8;
 	public static final int GAP = 4;
-	public static final int BRANCH_INDENT = 14;
-	public static final int BRANCH_MIN_HEIGHT = 18;
-	public static final int DIVIDER_HEIGHT = 16;
-	public static final int FOOTER_HEIGHT = 9;
+	public static final int BRANCH_INDENT = 16;
+	public static final int BRANCH_MIN_HEIGHT = 24;
+	public static final int DIVIDER_HEIGHT = 20;
+	public static final int FOOTER_HEIGHT = 10;
 	/**
 	 * Kept an even number of pixels shorter than {@link #HEADER_HEIGHT} so a field
 	 * centred in a header lands on a whole pixel — that is what puts the text
 	 * inside a field on exactly the same line as the label text beside it.
 	 */
-	public static final int PARAM_HEIGHT = 14;
+	public static final int PARAM_HEIGHT = 16;
 	/** Space either side of the text in a field, and the same at both ends. */
 	public static final int PARAM_PAD_X = 4;
 	public static final int MIN_HEADER_WIDTH = 40;

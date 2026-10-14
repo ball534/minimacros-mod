@@ -75,6 +75,31 @@ java {
 	targetCompatibility = JavaVersion.VERSION_25
 }
 
+// Dependency-free checks run against the actual client classes without launching Minecraft.
+sourceSets {
+	regressionTest {
+		compileClasspath = sourceSets.client.output + sourceSets.client.compileClasspath
+		runtimeClasspath = output + sourceSets.client.output + sourceSets.client.runtimeClasspath
+	}
+}
+
+[
+	macroDataRegression: 'com.minimacros.macro.MacroDataRegressionTest',
+	runtimeRegression: 'com.minimacros.runtime.RuntimeRegressionTest'
+].each { taskName, testClass ->
+	tasks.register(taskName, JavaExec) {
+		dependsOn tasks.named('regressionTestClasses')
+		classpath = sourceSets.regressionTest.runtimeClasspath
+		mainClass = testClass
+		workingDir = layout.buildDirectory.dir("regression-tests/${taskName}").get().asFile
+		doFirst { workingDir.mkdirs() }
+	}
+}
+
+tasks.named('check') {
+	dependsOn tasks.named('macroDataRegression'), tasks.named('runtimeRegression')
+}
+
 jar {
 	def projectName = project.name
 	inputs.property "projectName", projectName

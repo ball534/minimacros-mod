@@ -52,20 +52,21 @@ public final class BlockRenderer {
 
 		int color = type.category().color();
 		int border = Theme.BLOCK_BORDER;
+		int accent = type.category().accent();
 
 		if (type.isBoolean()) {
 			drawHexagon(graphics, node.x, node.y, node.x + node.headerWidth,
-					node.y + node.headerHeight, color, border);
+					node.y + node.headerHeight, color, accent);
 		} else if (type.isReporter()) {
-			drawOval(graphics, node.x, node.y, node.x + node.headerWidth,
-					node.y + node.headerHeight, color, border);
+			drawValueShape(graphics, node.x, node.y, node.x + node.headerWidth,
+					node.y + node.headerHeight, color, accent);
 		} else {
 			// A C-block is one shape, so its header, arms, dividers and foot are
 			// outlined together — outlining each piece drew a line across every
 			// join and made the parts look like separate blocks.
 			if (node.branches.isEmpty()) {
 				fillPanel(graphics, node.x, node.y, node.x + node.headerWidth,
-						node.y + node.headerHeight, color, border);
+						node.y + node.headerHeight - BlockLayout.NOTCH_HEIGHT, color, border);
 			} else {
 				drawContainer(graphics, node, color, border);
 			}
@@ -74,6 +75,13 @@ public final class BlockRenderer {
 			graphics.fill(node.x + BlockLayout.NOTCH_X, node.y,
 					node.x + BlockLayout.NOTCH_X + BlockLayout.NOTCH_WIDTH,
 					node.y + BlockLayout.NOTCH_HEIGHT, border);
+			// A subtle top bevel and a stepped bottom connector, within the
+			// measured silhouette so stacking and hit-testing stay aligned.
+			int notchLeft = node.x + BlockLayout.NOTCH_X;
+			int notchRight = notchLeft + BlockLayout.NOTCH_WIDTH;
+			graphics.fill(node.x + 1, node.y + 1, notchLeft, node.y + 2, accent);
+			graphics.fill(notchRight, node.y + 1, node.x + node.headerWidth - 1, node.y + 2, accent);
+			drawConnector(graphics, node, color, border);
 		}
 
 		for (int i = 0; i < node.dividerYs.size(); i++) {
@@ -118,13 +126,14 @@ public final class BlockRenderer {
 
 		if (param.spec.acceptsOnlyBoolean()) {
 			// Same fill as every other empty slot — only the shape says what fits.
-			drawHexagon(graphics, x, y, right, bottom, Theme.PARAM_FILL, Theme.PARAM_FILL);
+			drawHexagon(graphics, x, y, right, bottom, Theme.PARAM_FILL, Theme.SLOT_BORDER);
 			return;
 		}
 		if (slot) {
-			drawOval(graphics, x, y, right, bottom, Theme.PARAM_FILL, Theme.PARAM_FILL);
+			drawValueShape(graphics, x, y, right, bottom, Theme.PARAM_FILL, Theme.SLOT_BORDER);
 		} else {
 			graphics.fill(x, y, right, bottom, Theme.PARAM_FILL);
+			graphics.outline(x, y, param.width, param.height, Theme.SLOT_BORDER);
 		}
 		if (editing) {
 			graphics.outline(x, y, param.width, param.height, Theme.PARAM_FOCUSED);
@@ -181,12 +190,33 @@ public final class BlockRenderer {
 		if (type.isBoolean()) {
 			outlineHexagon(graphics, node.x, node.y, right, bottom, color);
 		} else if (type.isReporter()) {
-			outlineOval(graphics, node.x, node.y, right, bottom, color);
-		} else if (node.branches.isEmpty()) {
-			graphics.outline(node.x, node.y, node.headerWidth, node.headerHeight, color);
+			outlineValueShape(graphics, node.x, node.y, right, bottom, color);
 		} else {
-			outlineContainer(graphics, node.x, bands(node), color);
+			if (node.branches.isEmpty()) {
+				graphics.outline(node.x, node.y, node.headerWidth,
+						node.headerHeight - BlockLayout.NOTCH_HEIGHT, color);
+			} else {
+				outlineContainer(graphics, node.x, bands(node), color);
+			}
+			outlineConnector(graphics, node, color);
 		}
+	}
+
+	private static void drawConnector(GuiGraphicsExtractor graphics, BlockLayout.Node node, int fill, int border) {
+		int left = node.x + BlockLayout.NOTCH_X;
+		int top = node.y + node.height - BlockLayout.NOTCH_HEIGHT;
+		graphics.fill(left, top - 1, left + BlockLayout.NOTCH_WIDTH, node.y + node.height, fill);
+		outlineConnector(graphics, node, border);
+	}
+
+	private static void outlineConnector(GuiGraphicsExtractor graphics, BlockLayout.Node node, int border) {
+		int left = node.x + BlockLayout.NOTCH_X;
+		int right = left + BlockLayout.NOTCH_WIDTH;
+		int bottom = node.y + node.height;
+		int top = bottom - BlockLayout.NOTCH_HEIGHT;
+		graphics.fill(left, top, left + 1, bottom, border);
+		graphics.fill(right - 1, top, right, bottom, border);
+		graphics.fill(left, bottom - 1, right, bottom, border);
 	}
 
 	/**
@@ -225,7 +255,7 @@ public final class BlockRenderer {
 				bands.add(new int[]{dividerY, dividerY + BlockLayout.DIVIDER_HEIGHT, fullRight});
 			}
 		}
-		bands.add(new int[]{node.footerY, node.footerY + BlockLayout.FOOTER_HEIGHT, fullRight});
+		bands.add(new int[]{node.footerY, node.footerY + BlockLayout.FOOTER_HEIGHT - BlockLayout.NOTCH_HEIGHT, fullRight});
 		return bands;
 	}
 
@@ -303,14 +333,8 @@ public final class BlockRenderer {
 		graphics.fill(x1 + cap, y2 - 1, x2 - cap, y2, border);
 	}
 
-	/**
-	 * The rounded shape that marks a value: reporters and the slots they drop
-	 * into. Drawn a row at a time, as the hexagon is, because the ends follow an
-	 * arc rather than a straight taper — a taper steep enough to read as properly
-	 * round ends in a point, and a point is what a hexagon uses to say it is a
-	 * condition.
-	 */
-	private static void drawOval(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
+	/** Reporters and value slots share the same clipped corners. */
+	private static void drawValueShape(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
 			int fill, int border) {
 		int height = y2 - y1;
 		if (height <= 0) {
@@ -318,16 +342,16 @@ public final class BlockRenderer {
 		}
 
 		for (int row = 0; row < height; row++) {
-			int inset = ovalInset(height, x2 - x1, row);
+			int inset = valueInset(height, x2 - x1, row);
 			graphics.fill(x1 + inset, y1 + row, x2 - inset, y1 + row + 1, fill);
 		}
 
 		if (border != fill) {
-			outlineOval(graphics, x1, y1, x2, y2, border);
+			outlineValueShape(graphics, x1, y1, x2, y2, border);
 		}
 	}
 
-	private static void outlineOval(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
+	private static void outlineValueShape(GuiGraphicsExtractor graphics, int x1, int y1, int x2, int y2,
 			int border) {
 		int height = y2 - y1;
 		int width = x2 - x1;
@@ -335,36 +359,23 @@ public final class BlockRenderer {
 			return;
 		}
 
-		// Where the arc turns hardest it steps in by more than one pixel per row, so
-		// each row's edge is widened out to meet its neighbours' — a single-pixel
-		// edge would leave the border dashed around the curve.
 		for (int row = 0; row < height; row++) {
-			int inset = ovalInset(height, width, row);
+			int inset = valueInset(height, width, row);
 			int outer = Math.max(inset + 1, Math.max(
-					ovalInset(height, width, Math.max(0, row - 1)),
-					ovalInset(height, width, Math.min(height - 1, row + 1))));
+					valueInset(height, width, Math.max(0, row - 1)),
+					valueInset(height, width, Math.min(height - 1, row + 1))));
 			graphics.fill(x1 + inset, y1 + row, x1 + outer, y1 + row + 1, border);
 			graphics.fill(x2 - outer, y1 + row, x2 - inset, y1 + row + 1, border);
 		}
 
-		int cap = ovalInset(height, width, 0);
+		int cap = valueInset(height, width, 0);
 		graphics.fill(x1 + cap, y1, x2 - cap, y1 + 1, border);
 		graphics.fill(x1 + cap, y2 - 1, x2 - cap, y2, border);
 	}
 
-	/**
-	 * How far one end steps in on a given row: the gap between the box's edge and
-	 * a circle as tall as the shape, which makes each end a half-circle and the
-	 * whole block a pill.
-	 *
-	 * <p>Capped at half the width, so a slot narrower than it is tall keeps
-	 * something in the middle to draw rather than folding through itself. Shared
-	 * by fill and outline so the two can never disagree about the silhouette.
-	 */
-	private static int ovalInset(int height, int width, int row) {
-		double radius = height / 2.0;
-		double dy = Math.abs(row - (height - 1) / 2.0);
-		int inset = (int) Math.round(radius - Math.sqrt(Math.max(0, radius * radius - dy * dy)));
-		return Math.min(inset, width / 2);
+	/** Shared by the fill and outline, capped for narrow slots. */
+	private static int valueInset(int height, int width, int row) {
+		int corner = Math.min(3, Math.min(height / 2, width / 2));
+		return Math.max(0, corner - Math.min(row, height - 1 - row));
 	}
 }

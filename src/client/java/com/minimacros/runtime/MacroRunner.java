@@ -1,9 +1,13 @@
 package com.minimacros.runtime;
 
 import com.minimacros.config.MacroStorage;
+import com.minimacros.MiniMacrosClient;
+import com.minimacros.gui.MacroEditorScreen;
 import com.minimacros.macro.Keybind;
 import com.minimacros.macro.MacroDefinition;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -19,13 +23,16 @@ import java.util.Set;
  * in the world, so pressing a macro's key while typing does not fire it.
  */
 public final class MacroRunner {
-	/** Stops one runaway macro from spawning an unbounded pile of others via "run macro". */
+	/** Bounds the work performed by simultaneous macros each tick. */
 	private static final int MAX_CONCURRENT = 16;
 
 	private static final MacroRunner INSTANCE = new MacroRunner();
 
 	private final List<MacroExecution> running = new ArrayList<>();
 	private final Set<String> firingLastTick = new HashSet<>();
+	private final Set<String> firingNow = new HashSet<>();
+	private ClientLevel lastLevel;
+	private LocalPlayer lastPlayer;
 
 	private MacroRunner() {
 	}
@@ -34,25 +41,38 @@ public final class MacroRunner {
 		return INSTANCE;
 	}
 
-	public void onEndClientTick(Minecraft minecraft) {
+	public void onEndClientTick(Minecraft minecraft, boolean allowStarting) {
 		if (minecraft.player == null || minecraft.level == null) {
 			stopAll();
 			firingLastTick.clear();
+			lastLevel = null;
+			lastPlayer = null;
 			return;
+		}
+		boolean worldChanged = minecraft.level != lastLevel || minecraft.player != lastPlayer;
+		lastLevel = minecraft.level;
+		lastPlayer = minecraft.player;
+		boolean canRun = minecraft.isWindowActive() && !minecraft.isPaused()
+				&& minecraft.player.isAlive() && !(minecraft.gui.screen() instanceof MacroEditorScreen);
+		if (worldChanged || !canRun) {
+			stopAll();
 		}
 
 		// Running macros keep going while a screen is open — that is what lets a
 		// macro open chat and echo into it. Starting one is still gated, so
 		// typing a letter that happens to be a macro key does not fire it.
-		if (minecraft.gui.screen() == null) {
-			dispatchKeybinds(minecraft);
-		} else {
-			firingLastTick.clear();
-		}
+		// Track held combinations in screens as well, so closing a screen does
+		// not turn a key still held from typing into a fresh macro press.
+		dispatchKeybinds(allowStarting && canRun && !worldChanged && minecraft.gui.screen() == null);
 
 		for (Iterator<MacroExecution> iterator = running.iterator(); iterator.hasNext(); ) {
 			MacroExecution execution = iterator.next();
-			execution.tick();
+			try {
+				execution.tick();
+			} catch (RuntimeException exception) {
+				execution.stop();
+				MiniMacrosClient.LOGGER.error("Stopped macro '{}' after an execution error", execution.macro().name(), exception);
+			}
 			if (execution.finished()) {
 				iterator.remove();
 			}
@@ -64,8 +84,8 @@ public final class MacroRunner {
 	 * Tracked per macro rather than per key, so two macros can share a key with
 	 * different modifiers.
 	 */
-	private void dispatchKeybinds(Minecraft minecraft) {
-		Set<String> firingNow = new HashSet<>();
+	private void dispatchKeybinds(boolean allowStarting) {
+		firingNow.clear();
 
 		for (MacroDefinition macro : MacroStorage.macros()) {
 			if (!macro.enabled() || !macro.hasKeybind()) {
@@ -75,7 +95,7 @@ public final class MacroRunner {
 				continue;
 			}
 			firingNow.add(macro.id());
-			if (!firingLastTick.contains(macro.id())) {
+			if (allowStarting && !firingLastTick.contains(macro.id())) {
 				start(macro);
 			}
 		}

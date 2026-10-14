@@ -6,6 +6,7 @@ import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** A named, keybindable script: one or more stacks that all run at once. */
 public class MacroDefinition {
@@ -79,7 +80,7 @@ public class MacroDefinition {
 	public void migrateLegacyKeybind() {
 		keyCode = Keybind.fromLegacyCode(keyCode);
 		modifierKeys = modifierKeys.stream().map(Keybind::fromLegacyCode)
-				.filter(key -> key != UNBOUND).toList();
+				.filter(key -> key != UNBOUND).collect(Collectors.toCollection(ArrayList::new));
 	}
 
 	public boolean hasKeybind() {
@@ -119,11 +120,14 @@ public class MacroDefinition {
 		if (modifierKeys == null) {
 			modifierKeys = new ArrayList<>();
 		}
+		modifierKeys.removeIf(key -> key == null);
 		if (stacks == null) {
 			stacks = new ArrayList<>();
 		}
+		stacks.removeIf(stack -> stack == null);
 		// A save from before macros could hold more than one stack.
 		if (script != null) {
+			script.removeIf(block -> block == null);
 			if (!script.isEmpty()) {
 				stacks.add(new ScriptStack(LEGACY_STACK_X, LEGACY_STACK_Y, script));
 			}

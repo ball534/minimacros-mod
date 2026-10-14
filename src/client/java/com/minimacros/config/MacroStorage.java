@@ -79,6 +79,7 @@ public final class MacroStorage {
 		try (Reader reader = Files.newBufferedReader(FILE)) {
 			SaveFile parsed = GSON.fromJson(reader, SaveFile.class);
 			macros = parsed == null || parsed.macros == null ? new ArrayList<>() : parsed.macros;
+			macros.removeIf(macro -> macro == null);
 			for (MacroDefinition macro : macros) {
 				macro.normalize();
 				if (parsed.version < 2) {

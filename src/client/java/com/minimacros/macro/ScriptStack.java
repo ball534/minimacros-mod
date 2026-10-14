@@ -61,6 +61,7 @@ public class ScriptStack {
 		if (blocks == null) {
 			blocks = new ArrayList<>();
 		}
+		blocks.removeIf(block -> block == null);
 		for (BlockInstance block : blocks) {
 			block.normalize();
 		}

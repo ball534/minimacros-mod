@@ -2,6 +2,12 @@
 
 Build client-side macros out of drag-and-drop blocks and bind them to a key.
 
+The mod loads only on the client. It adds an editor, keybindings, and a macro
+runner; it does not register server features, replace game mechanics, or use
+mixins. Running a macro deliberately performs its configured inputs, camera
+turns, and messages through Minecraft's existing client systems. Normal
+multiplayer actions performed by those inputs still reach the server as usual.
+
 A macro is a set of block stacks laid out on a canvas. Stacks standing side by
 side all run at the same time, so one can drive movement while another watches
 for something and echoes into chat.
@@ -11,17 +17,22 @@ for something and echoes into chat.
 Open the editor from **Mods → Mini Macros → Config**, or bind a key to
 *Open Mini Macros* under **Options → Controls**.
 
-- Drag blocks from the store on the right onto the canvas.
+- Search or filter the block library on the right, then drag blocks onto the canvas.
 - Blocks snap to the top or bottom of a stack; dropped in open space they start
   a stack of their own.
 - Drop reporters (ovals) and conditions (hexagons) into the matching holes.
 - Right-click a block to duplicate it and everything below it.
-- Drag a block onto the store to throw it away.
+- Drag a block onto the library to throw it away.
 - Give the macro a name and a key, then **Save**. **Done** closes the editor,
   keeping which macros are ticked on.
 
 **Right Shift** stops every running macro. It is bound by default and can be
 changed under **Options → Controls**.
+
+Running macros also stop when the client loses focus, pauses, disconnects,
+changes world or player, shuts down, or opens the editor, and when the player
+dies. A key held while leaving a screen must be released and pressed again to
+start a macro.
 
 Macros are stored in `config/mini-macros/macros.json`, one file for all of them.
 A single macro can be copied to and from the clipboard with Ctrl+C / Ctrl+V

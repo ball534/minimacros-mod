@@ -33,10 +33,6 @@ public final class ExecutionContext {
 		this.input = input;
 	}
 
-	public Minecraft minecraft() {
-		return Minecraft.getInstance();
-	}
-
 	public LocalPlayer player() {
 		return Minecraft.getInstance().player;
 	}
@@ -44,10 +40,6 @@ public final class ExecutionContext {
 	/** The open screen, or null when the player is in the world. */
 	public Screen screen() {
 		return Minecraft.getInstance().gui.screen();
-	}
-
-	public InputSimulator input() {
-		return input;
 	}
 
 	// --- values ---------------------------------------------------------

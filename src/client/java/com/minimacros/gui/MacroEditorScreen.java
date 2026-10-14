@@ -91,6 +91,7 @@ public class MacroEditorScreen extends Screen {
 		macroList.setOnSelect(this::onMacroSelected);
 		canvas = new ScriptCanvasWidget(this.font, this::beginDrag);
 		palette = new PaletteWidget(this.font);
+		addRenderableWidget(palette.searchField());
 
 		buildLeftColumn();
 		buildTopBar();
@@ -191,9 +192,11 @@ public class MacroEditorScreen extends Screen {
 		if (paletteOpen) {
 			palette.setBounds(splitterX + SPLITTER_WIDTH, contentTop, paletteWidth,
 					contentBottom - contentTop);
-		} else {
-			palette.closeCategoryList();
 		}
+		palette.searchField().visible = paletteOpen
+				&& palette.searchField().getY() + palette.searchField().getHeight() < contentBottom;
+		palette.searchField().active = palette.searchField().visible;
+		if (!palette.searchField().visible && getFocused() == palette.searchField()) setFocused(null);
 
 		paletteToggle.setPosition(splitterX, contentTop);
 		paletteToggle.setMessage(Component.literal(paletteOpen ? ">" : "<"));
@@ -347,9 +350,6 @@ public class MacroEditorScreen extends Screen {
 
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 
-		if (paletteOpen) {
-			palette.renderCategoryList(graphics, mouseX, mouseY);
-		}
 		renderDragGhost(graphics);
 	}
 
@@ -368,11 +368,6 @@ public class MacroEditorScreen extends Screen {
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
 		if (drag != null) {
 			return true;
-		}
-
-		// An open popup swallows the next click, wherever it lands.
-		if (paletteOpen && palette.categoryListOpen()) {
-			return palette.mouseClicked(event);
 		}
 
 		if (super.mouseClicked(event, doubleClick)) {

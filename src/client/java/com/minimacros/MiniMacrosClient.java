@@ -6,7 +6,9 @@ import com.minimacros.runtime.MacroRunner;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import org.slf4j.Logger;
@@ -36,18 +38,22 @@ public class MiniMacrosClient implements ClientModInitializer {
 		KeyMappingHelper.registerKeyMapping(PANIC);
 
 		ClientTickEvents.END_CLIENT_TICK.register(MiniMacrosClient::onEndClientTick);
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, minecraft) -> MacroRunner.get().stopAll());
+		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> MacroRunner.get().stopAll());
 
 		LOGGER.info("Mini Macros ready with {} macro(s)", MacroStorage.macros().size());
 	}
 
 	private static void onEndClientTick(Minecraft minecraft) {
+		boolean panicPressed = false;
 		while (PANIC.consumeClick()) {
+			panicPressed = true;
 			MacroRunner.get().stopAll();
 		}
 		while (OPEN_EDITOR.consumeClick()) {
 			minecraft.setScreenAndShow(new MacroEditorScreen(minecraft.gui.screen()));
 		}
 
-		MacroRunner.get().onEndClientTick(minecraft);
+		MacroRunner.get().onEndClientTick(minecraft, !panicPressed && !PANIC.isDown());
 	}
 }

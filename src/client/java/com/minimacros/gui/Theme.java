@@ -12,32 +12,32 @@ public final class Theme {
 	public static final int TEXT = 0xFFFFFFFF;
 	public static final int TEXT_MUTED = 0xFFA0A0A0;
 	public static final int TEXT_PROMPT = 0xFFFFFF55;
-	public static final int TEXT_ON_BLOCK = 0xFFFFFFFF;
+	public static final int TEXT_ON_BLOCK = 0xFFEDF0E8;
+
+	/** Workbench colours, scoped to the library, canvas and blocks. */
+	public static final int WORKSPACE_BACKGROUND = 0xFF171A1F;
+	public static final int WORKSPACE_GRID = 0xFF292E36;
+	public static final int LIBRARY_BACKGROUND = 0xFF22262D;
+	public static final int WORKSPACE_BORDER = 0xFF39414C;
+	public static final int WORKSPACE_TEXT = 0xFFEDF0E8;
+	public static final int WORKSPACE_MUTED = 0xFFA5ADB8;
+	public static final int SLOT_BORDER = 0xFF65707F;
 
 	/** A white frame around the row the cursor is on. */
 	public static final int ROW_HOVER_OUTLINE = 0xFFFFFFFF;
 	/** A pale wash marking the row that is selected, read through by its text. */
 	public static final int ROW_SELECTED = 0x55FFFFFF;
 
-	// The category picker keeps its own flat panel rather than vanilla's furniture.
-	public static final int MENU_BACKGROUND = 0xFF1B1B1F;
-	public static final int MENU_BORDER = 0xFF3A3A42;
-	/** Border of the picker's list while it is open. */
-	public static final int MENU_BORDER_OPEN = 0xFF7A7AFF;
-	public static final int MENU_ROW_HOVER = 0xFF2A2A32;
-
 	/** Every block is outlined in the same dark grey, whatever its category colour. */
-	public static final int BLOCK_BORDER = 0xFF2A2A30;
+	public static final int BLOCK_BORDER = 0xFF111419;
 	/** Hover highlight: solid white, traced around the block's own silhouette. */
 	public static final int BLOCK_HOVER = 0xFFFFFFFF;
-	public static final int DROP_INDICATOR = 0xFFFFFFFF;
+	public static final int DROP_INDICATOR = 0xFF74C7B2;
 
-	public static final int PARAM_FILL = 0xFF56565E;
-	public static final int PARAM_TEXT = 0xFFFFFFFF;
+	public static final int PARAM_FILL = 0xFF171A1F;
+	public static final int PARAM_TEXT = 0xFFEDF0E8;
 	/** Ring around the field currently being typed into. */
 	public static final int PARAM_FOCUSED = 0xFFFFFFFF;
-
-	public static final int PADDING = 6;
 
 	private Theme() {
 	}

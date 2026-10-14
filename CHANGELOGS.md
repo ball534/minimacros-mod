@@ -3,6 +3,37 @@
 All notable changes to Mini Macros are recorded here. Versions follow
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Restyled only the block library, blocks, and canvas with muted material colours,
+  pixel bevels, recessed slots, and a subtle grid. The rest of the editor retains
+  its original design, and all text uses Minecraft's font.
+- Added library search and visible category filters. Cached library layouts and
+  skipped drawing offscreen blocks instead of rebuilding them every frame.
+- Removed unused category-menu constants and execution-context accessors.
+- Reused keybind tracking collections and replaced an unnecessary concurrent
+  collection on the client thread.
+
+### Fixed
+
+- Repaired null entries in saved macros without shifting if/else branches or
+  breaking legacy migrations.
+- Releasing macro inputs no longer clears keys held by other macros or the player;
+  releasing a key after opening a screen also cleans up its previous world hold.
+- Sleep resumes exactly the requested number of ticks later. Stopped macros no
+  longer apply pending camera turns, and nonfinite turn angles are ignored.
+- Macros stop on disconnect, shutdown, world/player changes, focus loss, pause,
+  death, or opening the editor. Execution errors stop the affected macro.
+- Panic no longer allows immediate retriggering, and closing a screen with a
+  key still held no longer starts a macro unexpectedly.
+
+### Validation
+
+- Added dependency-free regression checks for saved data and macro execution,
+  included in the Gradle build.
+
 ## 1.1.0
 
 ### Added

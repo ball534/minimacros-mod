@@ -119,9 +119,15 @@ public final class ScriptCanvasWidget {
 		}
 		rebuild();
 
-		Panels.list(graphics, x, y, width, height, 0);
+		graphics.fill(x, y, x + width, y + height, Theme.WORKSPACE_BACKGROUND);
 
 		graphics.enableScissor(x, y, x + width, y + height);
+		// Anchor the grid to content coordinates so it follows canvas panning.
+		for (int gridY = y + Math.floorMod(12 - scrollY, 24); gridY < y + height; gridY += 24) {
+			for (int gridX = x + Math.floorMod(12 - scrollX, 24); gridX < x + width; gridX += 24) {
+				graphics.fill(gridX, gridY, gridX + 1, gridY + 1, Theme.WORKSPACE_GRID);
+			}
+		}
 		graphics.pose().pushMatrix();
 		graphics.pose().translate((float) (x - scrollX), (float) (y - scrollY));
 
@@ -152,10 +158,13 @@ public final class ScriptCanvasWidget {
 
 		graphics.pose().popMatrix();
 		graphics.disableScissor();
+		graphics.outline(x, y, width, height, Theme.WORKSPACE_BORDER);
 
 		if (stacks.isEmpty() && drag == null) {
-			graphics.centeredText(font, "Drag blocks here from the store on the right",
-					x + width / 2, y + (height - font.lineHeight) / 2, Theme.TEXT_MUTED);
+			graphics.enableScissor(x + 1, y + 1, x + width - 1, y + height - 1);
+			graphics.centeredText(font, "Drag blocks here from the library",
+					x + width / 2, y + (height - font.lineHeight) / 2, Theme.WORKSPACE_MUTED);
+			graphics.disableScissor();
 		}
 	}
 

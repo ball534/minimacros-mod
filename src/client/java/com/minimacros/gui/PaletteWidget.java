@@ -6,242 +6,176 @@ import com.minimacros.macro.BlockRegistry;
 import com.minimacros.macro.BlockType;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
-/**
- * The block store on the right of the splitter: a category picker over a
- * scrolling shelf of blocks that can be dragged onto the canvas.
- *
- * <p>The picker wears a vanilla button face and drops a vanilla popup, so it
- * behaves the way the rest of the game's pickers look like they should.
- */
+/** Searchable workbench library. All text uses the screen's Minecraft font. */
 public final class PaletteWidget {
-	public static final int PICKER_HEIGHT = Panels.WIDGET_HEIGHT;
-	/** Gap under the picker, leaving room for the shelf's top separator. */
-	private static final int PICKER_GAP = 4;
-	private static final int ENTRY_GAP = 6;
-	private static final int OPTION_HEIGHT = 14;
-
-	/** "All Blocks" followed by every category, in declaration order. */
-	private static final List<String> OPTION_LABELS = buildOptionLabels();
-
+	private static final int INSET = 8;
+	private static final int CHIP_HEIGHT = 18;
+	private static final int CHIP_GAP = 4;
+	private static final int ENTRY_GAP = 10;
+	private static final BlockCategory[] CATEGORIES = BlockCategory.values();
 	private final Font font;
-
+	private final EditBox searchField;
+	private final Scrollbar scrollbar = new Scrollbar();
+	private final List<Entry> entries = new ArrayList<>();
 	private int x;
 	private int y;
 	private int width;
 	private int height;
-	private final Scrollbar scrollbar = new Scrollbar();
-
-	/** null means "every category". */
 	private BlockCategory category;
-	private boolean categoryListOpen;
+	private boolean layoutDirty = true;
+	private int contentHeight;
+	private int appliedScroll;
 
-	private final List<Entry> entries = new ArrayList<>();
-
-	/** One shelf item, laid out exactly as the block will be on the canvas. */
-	private record Entry(BlockType type, BlockLayout.Layout layout, int height) {
-	}
+	private record Entry(BlockType type, BlockLayout.Layout layout, int height) {}
 
 	public PaletteWidget(Font font) {
 		this.font = font;
+		searchField = new EditBox(font, 0, 0, 100, 20, Component.literal("Search blocks"));
+		searchField.setHint(Component.literal("Search blocks..."));
+		searchField.setBordered(false);
+		searchField.setTextColor(Theme.WORKSPACE_TEXT);
+		searchField.setResponder(text -> {
+			scrollbar.reset();
+			layoutDirty = true;
+		});
 	}
 
+	public EditBox searchField() { return searchField; }
+
 	public void setBounds(int x, int y, int width, int height) {
+		if (this.x != x || this.y != y || this.width != width || this.height != height) layoutDirty = true;
 		this.x = x;
 		this.y = y;
 		this.width = width;
 		this.height = height;
-	}
-
-	public boolean categoryListOpen() {
-		return categoryListOpen;
-	}
-
-	public void closeCategoryList() {
-		categoryListOpen = false;
+		searchField.setPosition(x + INSET + 5, y + 29);
+		searchField.setWidth(Math.max(1, width - INSET * 2 - 10));
+		searchField.setHeight(font.lineHeight + 2);
 	}
 
 	public boolean contains(double mouseX, double mouseY) {
 		return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
 	}
 
-	/** Top of the shelf panel, below the picker and its separator. */
+	private int columns() { return width >= 180 ? (height < 240 ? 4 : 3) : 2; }
+	private int chipWidth() { return Math.max(1, (width - INSET * 2 - CHIP_GAP * (columns() - 1)) / columns()); }
+	private int chipX(int index) { return x + INSET + index % columns() * (chipWidth() + CHIP_GAP); }
+	private int chipY(int index) { return y + 48 + index / columns() * (CHIP_HEIGHT + CHIP_GAP); }
+
 	private int shelfTop() {
-		return y + PICKER_HEIGHT + PICKER_GAP;
+		int rows = (CATEGORIES.length + 1 + columns() - 1) / columns();
+		return y + 48 + rows * (CHIP_HEIGHT + CHIP_GAP) + 22;
 	}
 
-	private int shelfHeight() {
-		return Math.max(0, y + height - shelfTop());
-	}
+	private int shelfHeight() { return Math.max(0, y + height - INSET - shelfTop()); }
 
-	private String categoryLabel() {
-		return category == null ? "All Blocks" : category.displayName();
-	}
-
-	/**
-	 * Rebuilds the shelf against the current category, filter and scroll.
-	 * Cheap enough to run every frame, which keeps hit-testing and drawing from
-	 * ever disagreeing about where a block is.
-	 *
-	 * <p>The scrollbar is aimed first, from the shelf as it stood last time. A
-	 * block's height does not depend on where it sits, so the measurement holds
-	 * from one frame to the next; only the very first frame has nothing to go on,
-	 * and that one has nothing to scroll either.
-	 */
 	private void rebuild() {
-		scrollbar.setTrack(x, shelfTop(), width, shelfHeight(), contentHeight());
-
-		entries.clear();
-		int cursorY = shelfTop() + ENTRY_GAP - (int) scrollbar.amount();
-
-		for (BlockType type : BlockRegistry.all()) {
-			if (category != null && type.category() != category) {
-				continue;
+		if (layoutDirty) rebuildEntries();
+		scrollbar.setTrack(x + INSET, shelfTop(), Math.max(0, width - INSET * 2), shelfHeight(), contentHeight);
+		int scroll = (int) scrollbar.amount();
+		int delta = appliedScroll - scroll;
+		if (delta != 0) {
+			for (Entry entry : entries) {
+				for (BlockLayout.Node node : entry.layout().nodes) node.translate(0, delta);
 			}
+		}
+		appliedScroll = scroll;
+	}
 
-			BlockLayout.Layout layout = BlockLayout.compute(List.of(BlockInstance.create(type)),
-					x + Theme.PADDING, cursorY, font);
-			int entryHeight = layout.nodes.isEmpty() ? BlockLayout.HEADER_HEIGHT : layout.nodes.getFirst().height;
+	private void rebuildEntries() {
+		entries.clear();
+		String query = searchField.getValue().strip().toLowerCase(Locale.ROOT);
+		int cursorY = shelfTop() + ENTRY_GAP;
+		for (BlockType type : BlockRegistry.all()) {
+			if (category != null && type.category() != category) continue;
+			String searchable = type.label() + " " + type.id() + " " + type.category().displayName();
+			if (!searchable.toLowerCase(Locale.ROOT).contains(query)) continue;
+			BlockLayout.Layout layout = BlockLayout.compute(List.of(BlockInstance.create(type)), x + INSET, cursorY, font);
+			int entryHeight = layout.nodes.getFirst().height;
 			entries.add(new Entry(type, layout, entryHeight));
 			cursorY += entryHeight + ENTRY_GAP;
 		}
-	}
-
-	private int contentHeight() {
-		int total = ENTRY_GAP;
-		for (Entry entry : entries) {
-			total += entry.height() + ENTRY_GAP;
-		}
-		return total;
+		contentHeight = cursorY - shelfTop();
+		appliedScroll = 0;
+		layoutDirty = false;
 	}
 
 	public void render(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
 		rebuild();
-
-		boolean overPicker = mouseX >= x && mouseX < x + width
-				&& mouseY >= y && mouseY < y + PICKER_HEIGHT;
-		graphics.fill(x, y, x + width, y + PICKER_HEIGHT,
-				overPicker ? Theme.MENU_ROW_HOVER : Theme.MENU_BACKGROUND);
-		graphics.outline(x, y, width, PICKER_HEIGHT, Theme.MENU_BORDER);
-		graphics.centeredText(font, categoryLabel(), x + width / 2,
-				y + (PICKER_HEIGHT - font.lineHeight) / 2, Theme.TEXT);
-		graphics.text(font, categoryListOpen ? "^" : "v", x + width - 12,
-				y + (PICKER_HEIGHT - font.lineHeight) / 2, Theme.TEXT_MUTED);
-
-		Panels.list(graphics, x, shelfTop(), width, shelfHeight(), scrollbar.amount());
-
-		graphics.enableScissor(x, shelfTop(), x + width, y + height);
-		for (Entry entry : entries) {
-			BlockRenderer.drawStack(graphics, font, entry.layout().nodes, null, null);
+		graphics.fill(x, y, x + width, y + height, Theme.LIBRARY_BACKGROUND);
+		graphics.outline(x, y, width, height, Theme.WORKSPACE_BORDER);
+		graphics.enableScissor(x + 1, y + 1, x + width - 1, y + height - 1);
+		graphics.text(font, "BLOCK LIBRARY", x + INSET, y + 9, Theme.WORKSPACE_TEXT);
+		graphics.fill(x + INSET, y + 23, x + width - INSET, y + 43, Theme.PARAM_FILL);
+		graphics.outline(x + INSET, y + 23, width - INSET * 2, 20,
+				searchField.isFocused() ? Theme.PARAM_FOCUSED : Theme.WORKSPACE_BORDER);
+		for (int i = 0; i <= CATEGORIES.length; i++) {
+			BlockCategory chipCategory = i == 0 ? null : CATEGORIES[i - 1];
+			int cx = chipX(i);
+			int cy = chipY(i);
+			boolean selected = category == chipCategory;
+			boolean hovered = mouseX >= cx && mouseX < cx + chipWidth() && mouseY >= cy && mouseY < cy + CHIP_HEIGHT;
+			int fill = chipCategory == null ? Theme.WORKSPACE_BORDER : chipCategory.color();
+			int accent = chipCategory == null ? Theme.DROP_INDICATOR : chipCategory.accent();
+			graphics.fill(cx, cy, cx + chipWidth(), cy + CHIP_HEIGHT, fill);
+			if (selected || hovered) graphics.outline(cx, cy, chipWidth(), CHIP_HEIGHT,
+					selected ? accent : Theme.WORKSPACE_TEXT);
+			String label = chipCategory == null ? "All" : chipCategory.displayName();
+			graphics.centeredText(font, font.plainSubstrByWidth(label, Math.max(1, chipWidth() - 8)),
+					cx + chipWidth() / 2, BlockLayout.textTop(cy, CHIP_HEIGHT, font), Theme.WORKSPACE_TEXT);
 		}
+		graphics.text(font, category == null ? "All blocks" : category.displayName(),
+				x + INSET, shelfTop() - 15, Theme.WORKSPACE_MUTED);
+		graphics.fill(x + INSET, shelfTop() - 4, x + width - INSET, shelfTop() - 3, Theme.WORKSPACE_BORDER);
 		graphics.disableScissor();
-
+		if (shelfHeight() <= 0) return;
+		graphics.enableScissor(x + INSET, shelfTop(), x + width - INSET - Panels.SCROLLBAR_WIDTH, y + height - INSET);
+		for (Entry entry : entries) {
+			BlockLayout.Node node = entry.layout().nodes.getFirst();
+			if (node.y + entry.height() <= shelfTop() || node.y >= y + height - INSET) continue;
+			BlockLayout.Node hovered = overShelf(mouseX, mouseY)
+					? BlockLayout.hitTest(entry.layout().nodes, mouseX, mouseY) : null;
+			BlockRenderer.drawStack(graphics, font, entry.layout().nodes, hovered, null);
+		}
+		if (entries.isEmpty()) graphics.text(font, "No matching blocks", x + INSET, shelfTop() + ENTRY_GAP, Theme.WORKSPACE_MUTED);
+		graphics.disableScissor();
 		scrollbar.render(graphics);
 	}
 
-	/** Drawn after everything else so the open list sits above the shelf. */
-	public void renderCategoryList(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
-		if (!categoryListOpen) {
-			return;
-		}
-		graphics.nextStratum();
-
-		List<String> options = optionLabels();
-		int top = y + PICKER_HEIGHT;
-		int listHeight = options.size() * OPTION_HEIGHT + 2;
-
-		graphics.fill(x, top, x + width, top + listHeight, Theme.MENU_BACKGROUND);
-		graphics.outline(x, top, width, listHeight, Theme.MENU_BORDER_OPEN);
-
-		for (int i = 0; i < options.size(); i++) {
-			int optionY = optionTop(i);
-			boolean hovered = mouseX >= x && mouseX < x + width
-					&& mouseY >= optionY && mouseY < optionY + OPTION_HEIGHT;
-			if (hovered) {
-				graphics.fill(x + 1, optionY, x + width - 1, optionY + OPTION_HEIGHT, Theme.MENU_ROW_HOVER);
-			}
-			boolean current = (i == 0 && category == null)
-					|| (i > 0 && BlockCategory.values()[i - 1] == category);
-			graphics.text(font, options.get(i), x + Theme.PADDING,
-					optionY + (OPTION_HEIGHT - font.lineHeight) / 2,
-					current ? Theme.TEXT_PROMPT : Theme.TEXT);
-		}
+	private boolean overShelf(double mouseX, double mouseY) {
+		return mouseX >= x + INSET && mouseX < x + width - INSET - Panels.SCROLLBAR_WIDTH
+				&& mouseY >= shelfTop() && mouseY < y + height - INSET;
 	}
 
-	private int optionTop(int index) {
-		return y + PICKER_HEIGHT + 1 + index * OPTION_HEIGHT;
-	}
-
-	/** Built once: the categories are fixed, and this is read every frame. */
-	private static List<String> optionLabels() {
-		return OPTION_LABELS;
-	}
-
-	private static List<String> buildOptionLabels() {
-		List<String> options = new ArrayList<>();
-		options.add("All Blocks");
-		for (BlockCategory value : BlockCategory.values()) {
-			options.add(value.displayName());
-		}
-		return List.copyOf(options);
-	}
-
-	/** @return true if the click was consumed. */
 	public boolean mouseClicked(MouseButtonEvent event) {
+		if (!contains(event.x(), event.y())) return false;
 		rebuild();
-
-		if (categoryListOpen && handleCategoryListClick(event)) {
-			return true;
-		}
-
-		if (event.y() >= y && event.y() < y + PICKER_HEIGHT) {
-			categoryListOpen = !categoryListOpen;
-			return true;
-		}
-
-		categoryListOpen = false;
-		return scrollbar.mouseClicked(event.x(), event.y());
-	}
-
-	private boolean handleCategoryListClick(MouseButtonEvent event) {
-		List<String> options = optionLabels();
-
-		for (int i = 0; i < options.size(); i++) {
-			int optionY = optionTop(i);
-			if (event.x() >= x && event.x() < x + width
-					&& event.y() >= optionY && event.y() < optionY + OPTION_HEIGHT) {
-				category = i == 0 ? null : BlockCategory.values()[i - 1];
+		for (int i = 0; i <= CATEGORIES.length; i++) {
+			if (event.x() >= chipX(i) && event.x() < chipX(i) + chipWidth()
+					&& event.y() >= chipY(i) && event.y() < chipY(i) + CHIP_HEIGHT) {
+				category = i == 0 ? null : CATEGORIES[i - 1];
 				scrollbar.reset();
-				categoryListOpen = false;
+				layoutDirty = true;
 				return true;
 			}
 		}
-		categoryListOpen = false;
-		return true;
+		return event.y() < shelfTop() || scrollbar.mouseClicked(event.x(), event.y());
 	}
 
-	/**
-	 * The block under the cursor on the shelf, as a fresh instance ready to drag.
-	 *
-	 * @return null if the cursor is not over a block.
-	 */
 	public BlockInstance blockAt(double mouseX, double mouseY, int[] grabOffsetOut) {
-		if (mouseY < shelfTop()) {
-			return null;
-		}
+		if (!overShelf(mouseX, mouseY)) return null;
 		rebuild();
-
 		for (Entry entry : entries) {
-			BlockLayout.Node node = entry.layout().nodes.isEmpty() ? null : entry.layout().nodes.getFirst();
-			if (node == null) {
-				continue;
-			}
-			if (mouseX >= node.x && mouseX < node.x + node.headerWidth
-					&& mouseY >= node.y && mouseY < node.y + entry.height()) {
+			BlockLayout.Node node = entry.layout().nodes.getFirst();
+			if (BlockLayout.hitTest(entry.layout().nodes, (int) mouseX, (int) mouseY) != null) {
 				grabOffsetOut[0] = (int) Math.round(mouseX - node.x);
 				grabOffsetOut[1] = (int) Math.round(mouseY - node.y);
 				return BlockInstance.create(entry.type());
@@ -250,22 +184,12 @@ public final class PaletteWidget {
 		return null;
 	}
 
-	/** True while the scrollbar is being dragged, even off the panel. */
-	public boolean isScrolling() {
-		return scrollbar.dragging();
-	}
-
-	public void mouseDragged(double mouseY) {
-		scrollbar.mouseDragged(mouseY);
-	}
-
-	public void mouseReleased() {
-		scrollbar.mouseReleased();
-	}
-
+	public boolean isScrolling() { return scrollbar.dragging(); }
+	public void mouseDragged(double mouseY) { scrollbar.mouseDragged(mouseY); }
+	public void mouseReleased() { scrollbar.mouseReleased(); }
 	public boolean mouseScrolled(double amount) {
 		rebuild();
-		scrollbar.scrollBy(amount, 14);
+		scrollbar.scrollBy(amount, 24);
 		return true;
 	}
 }

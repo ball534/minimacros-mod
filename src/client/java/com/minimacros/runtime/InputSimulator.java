@@ -3,16 +3,18 @@ package com.minimacros.runtime;
 import com.minimacros.MiniMacrosClient;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import org.lwjgl.sdl.SDLKeyboard;
+import org.lwjgl.sdl.SDLMouse;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Delivers input through Minecraft's own systems. Nothing here touches the
@@ -28,6 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * keys the player is genuinely holding.
  */
 public final class InputSimulator {
+	/** Accessed only from the client thread; separate macros may hold the same key. */
+	private static final Map<InputConstants.Key, Integer> HOLD_COUNTS = new HashMap<>();
 	private final Set<InputConstants.Key> heldKeys = new HashSet<>();
 
 	/**
@@ -82,7 +86,7 @@ public final class InputSimulator {
 			Map.entry("middlemouse", "mouse.middle"));
 
 	/** Key names already reported as unresolvable, so the log is warned once each. */
-	private static final Set<String> WARNED_KEYS = ConcurrentHashMap.newKeySet();
+	private static final Set<String> WARNED_KEYS = new HashSet<>();
 
 	/**
 	 * Resolves a macro's button argument. Single characters map to that letter or
@@ -134,7 +138,9 @@ public final class InputSimulator {
 		}
 		KeyMapping.set(key, true);
 		KeyMapping.click(key);
-		heldKeys.add(key);
+		if (heldKeys.add(key)) {
+			HOLD_COUNTS.merge(key, 1, Integer::sum);
+		}
 	}
 
 	public void keyUp(String value) {
@@ -142,8 +148,9 @@ public final class InputSimulator {
 		if (key.equals(InputConstants.UNKNOWN)) {
 			return;
 		}
-		KeyMapping.set(key, false);
-		heldKeys.remove(key);
+		if (heldKeys.remove(key)) {
+			releaseOwnedKey(key);
+		}
 	}
 
 	// --- screen input ---------------------------------------------------
@@ -165,12 +172,13 @@ public final class InputSimulator {
 	}
 
 	public void keyUpOnScreen(Screen screen, String value) {
+		// The matching down may have happened before the screen opened.
+		keyUp(value);
 		InputConstants.Key key = resolveKey(value);
 		if (key.equals(InputConstants.UNKNOWN)) {
 			return;
 		}
 		if (key.getType() == InputConstants.Type.MOUSE) {
-			keyUp(value);
 			return;
 		}
 		screen.keyReleased(screenKeyEvent(key));
@@ -198,8 +206,36 @@ public final class InputSimulator {
 	 */
 	public void releaseAll() {
 		for (InputConstants.Key key : heldKeys) {
-			KeyMapping.set(key, false);
+			releaseOwnedKey(key);
 		}
 		heldKeys.clear();
+	}
+
+	private static void releaseOwnedKey(InputConstants.Key key) {
+		int remaining = HOLD_COUNTS.getOrDefault(key, 1) - 1;
+		if (remaining > 0) {
+			HOLD_COUNTS.put(key, remaining);
+			return;
+		}
+		HOLD_COUNTS.remove(key);
+		// Do not send another press: toggle mappings treat that as a new toggle.
+		if (!physicallyHeldInWorld(key)) {
+			KeyMapping.set(key, false);
+		}
+	}
+
+	private static boolean physicallyHeldInWorld(InputConstants.Key key) {
+		Minecraft minecraft = Minecraft.getInstance();
+		if (!minecraft.isWindowActive() || minecraft.gui.screen() != null
+				|| minecraft.player == null || minecraft.level == null) {
+			return false;
+		}
+		if (key.getType() == InputConstants.Type.MOUSE) {
+			// Minecraft uses SDL's one-based button numbers for mouse keys.
+			int button = key.getValue();
+			return button > 0 && button <= Integer.SIZE
+					&& (SDLMouse.SDL_GetMouseState(null, null) & (1 << (button - 1))) != 0;
+		}
+		return InputConstants.isKeyDown(key.getValue());
 	}
 }

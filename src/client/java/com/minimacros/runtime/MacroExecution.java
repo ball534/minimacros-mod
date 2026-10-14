@@ -81,7 +81,7 @@ public final class MacroExecution {
 	 */
 	int scheduleTurn(double yawDegrees, double pitchDegrees, int ticks) {
 		Strand strand = active;
-		if (strand == null) {
+		if (strand == null || !Double.isFinite(yawDegrees) || !Double.isFinite(pitchDegrees)) {
 			return 0;
 		}
 		strand.turnYawRemaining = yawDegrees;
@@ -117,13 +117,13 @@ public final class MacroExecution {
 	}
 
 	public void tick() {
+		if (finished) {
+			return;
+		}
+
 		// Camera sweeps keep running even while their strand sleeps.
 		for (Strand strand : strands) {
 			applyTurnSlice(strand);
-		}
-
-		if (finished) {
-			return;
 		}
 
 		boolean anyRunning = false;
@@ -146,8 +146,7 @@ public final class MacroExecution {
 
 	/** Advances one strand until it yields, finishes or runs out of budget. */
 	private void tickStrand(Strand strand) {
-		if (strand.waitTicks > 0) {
-			strand.waitTicks--;
+		if (strand.waitTicks > 0 && --strand.waitTicks > 0) {
 			return;
 		}
 

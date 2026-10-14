@@ -5,27 +5,22 @@ package com.minimacros.macro;
  * at a glance before the label is even read.
  */
 public enum BlockCategory {
-	INPUT("Input", 0xFF4C97FF),
-	CONTROL("Control", 0xFFFFAB19),
-	MESSAGES("Messages", 0xFF59C059),
-	// Purple rather than a second orange: a variable reporter is usually sitting
-	// inside a gold control block, and the two oranges were hard to tell apart.
-	VARIABLES("Variables", 0xFF9966FF),
-	// Teal rather than green, which the messages blocks already use — an operator
-	// is most often nested in a variable or control block, so it has to read apart
-	// from purple and gold at a glance.
-	OPERATORS("Operators", 0xFF2FB8A8),
-	// Rose, well away from the operator teal: the two sections hold the same kind
-	// of expression but their blocks fit different holes, so they must not read
-	// as variants of one another.
-	COMPARATORS("Comparators", 0xFFC9599E);
+	INPUT("Input", 0xFF344D6A, 0xFF82AFE5),
+	CONTROL("Control", 0xFF604921, 0xFFD6AD5C),
+	MESSAGES("Messages", 0xFF304B47, 0xFF74C7B2),
+	// Amethyst values, moss operators and rose conditions remain distinct when nested.
+	VARIABLES("Variables", 0xFF493956, 0xFFB49AD8),
+	OPERATORS("Operators", 0xFF314D3C, 0xFF8FBD83),
+	COMPARATORS("Comparators", 0xFF603B4C, 0xFFCF8AA8);
 
 	private final String displayName;
 	private final int color;
+	private final int accent;
 
-	BlockCategory(String displayName, int color) {
+	BlockCategory(String displayName, int color, int accent) {
 		this.displayName = displayName;
 		this.color = color;
+		this.accent = accent;
 	}
 
 	public String displayName() {
@@ -34,5 +29,9 @@ public enum BlockCategory {
 
 	public int color() {
 		return color;
+	}
+
+	public int accent() {
+		return accent;
 	}
 }
