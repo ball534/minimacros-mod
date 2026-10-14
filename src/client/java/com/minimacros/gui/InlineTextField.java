@@ -3,7 +3,7 @@ package com.minimacros.gui;
 import com.minimacros.macro.ParamSpec;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 /**
  * A minimal text editor that lives inside a block.
@@ -57,7 +57,7 @@ public final class InlineTextField {
 	/** @return true if the key was consumed by the field. */
 	public boolean keyPressed(KeyEvent event) {
 		switch (event.key()) {
-			case GLFW.GLFW_KEY_BACKSPACE -> {
+			case InputConstants.KEY_BACKSPACE -> {
 				if (cursor > 0) {
 					value = value.substring(0, cursor - 1) + value.substring(cursor);
 					cursor--;
@@ -65,29 +65,29 @@ public final class InlineTextField {
 				resetBlink();
 				return true;
 			}
-			case GLFW.GLFW_KEY_DELETE -> {
+			case InputConstants.KEY_DELETE -> {
 				if (cursor < value.length()) {
 					value = value.substring(0, cursor) + value.substring(cursor + 1);
 				}
 				resetBlink();
 				return true;
 			}
-			case GLFW.GLFW_KEY_LEFT -> {
+			case InputConstants.KEY_LEFT -> {
 				cursor = Math.max(0, cursor - 1);
 				resetBlink();
 				return true;
 			}
-			case GLFW.GLFW_KEY_RIGHT -> {
+			case InputConstants.KEY_RIGHT -> {
 				cursor = Math.min(value.length(), cursor + 1);
 				resetBlink();
 				return true;
 			}
-			case GLFW.GLFW_KEY_HOME -> {
+			case InputConstants.KEY_HOME -> {
 				cursor = 0;
 				resetBlink();
 				return true;
 			}
-			case GLFW.GLFW_KEY_END -> {
+			case InputConstants.KEY_END -> {
 				cursor = value.length();
 				resetBlink();
 				return true;

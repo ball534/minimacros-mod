@@ -9,7 +9,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,14 +18,14 @@ public class MiniMacrosClient implements ClientModInitializer {
 	/** Unbound by default — the editor is normally reached through Mod Menu. */
 	private static final KeyMapping OPEN_EDITOR = new KeyMapping(
 			"key.mini-macros.open_editor",
-			InputConstants.Type.KEYSYM,
+			InputConstants.Type.KEYBOARD,
 			InputConstants.UNKNOWN.getValue(),
 			KeyMapping.Category.MISC);
 
 	private static final KeyMapping PANIC = new KeyMapping(
 			"key.mini-macros.panic",
-			InputConstants.Type.KEYSYM,
-			GLFW.GLFW_KEY_RIGHT_SHIFT,
+			InputConstants.Type.KEYBOARD,
+			InputConstants.KEY_RSHIFT,
 			KeyMapping.Category.MISC);
 
 	@Override

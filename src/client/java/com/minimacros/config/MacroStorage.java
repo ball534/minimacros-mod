@@ -19,7 +19,7 @@ import java.util.List;
 /** Loads and saves every macro to {@code config/mini-macros/macros.json}. */
 public final class MacroStorage {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-	private static final int FORMAT_VERSION = 1;
+	private static final int FORMAT_VERSION = 2;
 
 	private static final Path FILE = FabricLoader.getInstance()
 			.getConfigDir()
@@ -42,7 +42,9 @@ public final class MacroStorage {
 
 	/** Clipboard export for sharing a single macro. */
 	public static String toJson(MacroDefinition macro) {
-		return GSON.toJson(macro);
+		JsonObject object = GSON.toJsonTree(macro).getAsJsonObject();
+		object.addProperty("keyFormat", "sdl-scancode");
+		return GSON.toJson(object);
 	}
 
 	/** @return the parsed macro, or null if the text was not a macro. */
@@ -60,6 +62,9 @@ public final class MacroStorage {
 				return null;
 			}
 			macro.normalize();
+			if (!object.has("keyFormat")) {
+				macro.migrateLegacyKeybind();
+			}
 			return macro;
 		} catch (JsonSyntaxException | NullPointerException e) {
 			return null;
@@ -76,6 +81,9 @@ public final class MacroStorage {
 			macros = parsed == null || parsed.macros == null ? new ArrayList<>() : parsed.macros;
 			for (MacroDefinition macro : macros) {
 				macro.normalize();
+				if (parsed.version < 2) {
+					macro.migrateLegacyKeybind();
+				}
 			}
 		} catch (IOException | JsonSyntaxException e) {
 			MiniMacrosClient.LOGGER.error("Could not read {} — starting with no macros", FILE, e);

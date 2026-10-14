@@ -14,7 +14,7 @@ import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -487,11 +487,11 @@ public class MacroEditorScreen extends Screen {
 		if (canvas.keyPressed(event)) {
 			return true;
 		}
-		if ((event.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0) {
-			if (event.key() == GLFW.GLFW_KEY_C && copySelectedToClipboard()) {
+		if ((event.modifiers() & InputConstants.MOD_CONTROL) != 0) {
+			if (event.keycode() == InputConstants.KEYCODE_C && copySelectedToClipboard()) {
 				return true;
 			}
-			if (event.key() == GLFW.GLFW_KEY_V && pasteFromClipboard()) {
+			if (event.keycode() == InputConstants.KEYCODE_V && pasteFromClipboard()) {
 				return true;
 			}
 		}
@@ -503,13 +503,13 @@ public class MacroEditorScreen extends Screen {
 	 * not finish the capture — it waits for the key they are modifying.
 	 */
 	private void captureKeybind(KeyEvent event) {
-		if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
+		if (event.key() == InputConstants.KEY_ESCAPE) {
 			draft.clearKeybind();
 		} else if (Keybind.isModifier(event.key())) {
 			updateKeybindLabel();
 			return;
 		} else {
-			draft.setKeybind(event.key(), Keybind.heldModifiers(Minecraft.getInstance().getWindow()));
+			draft.setKeybind(event.key(), Keybind.heldModifiers());
 		}
 		capturingKeybind = false;
 		updateKeybindLabel();
@@ -544,5 +544,11 @@ public class MacroEditorScreen extends Screen {
 	@Override
 	public boolean isPauseScreen() {
 		return false;
+	}
+
+	@Override
+	public void removed() {
+		canvas.commitEdit();
+		super.removed();
 	}
 }

@@ -6,6 +6,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
+import org.lwjgl.sdl.SDLKeyboard;
 
 import java.util.HashSet;
 import java.util.Locale;
@@ -160,7 +161,7 @@ public final class InputSimulator {
 			keyDown(value);
 			return;
 		}
-		screen.keyPressed(new KeyEvent(key.getValue(), 0, 0));
+		screen.keyPressed(screenKeyEvent(key));
 	}
 
 	public void keyUpOnScreen(Screen screen, String value) {
@@ -172,7 +173,12 @@ public final class InputSimulator {
 			keyUp(value);
 			return;
 		}
-		screen.keyReleased(new KeyEvent(key.getValue(), 0, 0));
+		screen.keyReleased(screenKeyEvent(key));
+	}
+
+	private static KeyEvent screenKeyEvent(InputConstants.Key key) {
+		int scancode = key.getValue();
+		return new KeyEvent(scancode, SDLKeyboard.SDL_GetKeyFromScancode(scancode, (short) 0, false), 0);
 	}
 
 	/** Types text into an open screen, one character at a time and in order. */

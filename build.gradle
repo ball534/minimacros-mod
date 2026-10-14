@@ -6,6 +6,21 @@ version = project.mod_version
 group = project.maven_group
 
 repositories {
+	// This artifact's Gradle module metadata is malformed; use its Maven POM.
+	exclusiveContent {
+		forRepository {
+			maven {
+				name = 'FabricLogging'
+				url = 'https://maven.fabricmc.net/'
+				metadataSources {
+					mavenPom()
+					ignoreGradleMetadataRedirection()
+				}
+			}
+		}
+		filter { includeModule('net.fabricmc', 'fabric-log4j-util') }
+	}
+
 	// Mod Menu provides the entrypoint into the Mini Macros editor.
 	maven {
 		name = 'Terraformers'

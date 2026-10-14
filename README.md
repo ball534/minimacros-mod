@@ -36,7 +36,7 @@ while the editor has nothing else focused.
 The mod jar lands in `build/libs/`. `./gradlew runClient` starts a development
 client with the mod loaded.
 
-Requires Java 25 and Minecraft 26.2 with Fabric Loader and Fabric API. Mod Menu
+Requires Java 25 and Minecraft 26.3 with Fabric Loader and Fabric API. Mod Menu
 is optional but is how the editor is normally reached.
 
 ## License

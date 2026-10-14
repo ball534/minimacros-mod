@@ -3,12 +3,12 @@ package com.minimacros.gui;
 import com.minimacros.macro.BlockInstance;
 import com.minimacros.macro.ScriptStack;
 import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -186,7 +186,7 @@ public final class ScriptCanvasWidget {
 			return true;
 		}
 
-		if (event.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+		if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
 			commitEdit();
 			duplicateFrom(node);
 			return true;
@@ -216,6 +216,7 @@ public final class ScriptCanvasWidget {
 		} else {
 			edit = new BlockRenderer.EditTarget(block, param.spec.id(),
 					new InlineTextField(param.spec, block.arg(param.spec.id())));
+			Minecraft.getInstance().textInputManager().onTextInputFocusChange(this, true);
 		}
 	}
 
@@ -406,15 +407,15 @@ public final class ScriptCanvasWidget {
 		// A key slot takes the next press as its value — including enter, which
 		// would otherwise close a text field.
 		if (edit.capturing()) {
-			if (event.key() != GLFW.GLFW_KEY_ESCAPE) {
+			if (event.key() != InputConstants.KEY_ESCAPE) {
 				edit.block().setArg(edit.paramId(),
-						nameOf(InputConstants.Type.KEYSYM.getOrCreate(event.key())));
+						nameOf(InputConstants.Type.KEYBOARD.getOrCreate(event.key())));
 			}
 			edit = null;
 			return true;
 		}
-		if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER
-				|| event.key() == GLFW.GLFW_KEY_ESCAPE) {
+		if (event.key() == InputConstants.KEY_RETURN || event.key() == InputConstants.KEY_NUMPADENTER
+				|| event.key() == InputConstants.KEY_ESCAPE) {
 			commitEdit();
 			return true;
 		}
@@ -443,6 +444,7 @@ public final class ScriptCanvasWidget {
 	public void commitEdit() {
 		if (edit != null) {
 			if (!edit.capturing()) {
+				Minecraft.getInstance().textInputManager().onTextInputFocusChange(this, false);
 				edit.block().setArg(edit.paramId(), edit.field().value());
 			}
 			edit = null;

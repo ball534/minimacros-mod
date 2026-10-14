@@ -71,7 +71,7 @@ public final class MacroRunner {
 			if (!macro.enabled() || !macro.hasKeybind()) {
 				continue;
 			}
-			if (!Keybind.isCombinationDown(minecraft.getWindow(), macro.keyCode(), macro.modifierKeys())) {
+			if (!Keybind.isCombinationDown(macro.keyCode(), macro.modifierKeys())) {
 				continue;
 			}
 			firingNow.add(macro.id());

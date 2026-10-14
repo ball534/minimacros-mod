@@ -19,7 +19,7 @@ public class MacroDefinition {
 	private String name = "New Macro";
 	private boolean enabled = true;
 	private int keyCode = UNBOUND;
-	/** GLFW codes of the modifier keys that must be held alongside {@link #keyCode}. */
+	/** SDL scancodes of the modifier keys held alongside {@link #keyCode}. */
 	private List<Integer> modifierKeys = new ArrayList<>();
 	private List<ScriptStack> stacks = new ArrayList<>();
 	/**
@@ -57,7 +57,7 @@ public class MacroDefinition {
 		this.enabled = enabled;
 	}
 
-	/** Raw GLFW key code, or {@link #UNBOUND}. */
+	/** SDL scancode, or {@link #UNBOUND}. */
 	public int keyCode() {
 		return keyCode;
 	}
@@ -74,6 +74,12 @@ public class MacroDefinition {
 	public void clearKeybind() {
 		this.keyCode = UNBOUND;
 		this.modifierKeys = new ArrayList<>();
+	}
+
+	public void migrateLegacyKeybind() {
+		keyCode = Keybind.fromLegacyCode(keyCode);
+		modifierKeys = modifierKeys.stream().map(Keybind::fromLegacyCode)
+				.filter(key -> key != UNBOUND).toList();
 	}
 
 	public boolean hasKeybind() {
