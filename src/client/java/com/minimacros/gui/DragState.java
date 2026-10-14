@@ -27,6 +27,7 @@ public final class DragState {
 
 	private int screenX;
 	private int screenY;
+	private double scale = 1.0;
 
 	private DragState(List<BlockInstance> blocks, List<BlockInstance> originList, int originIndex,
 			int grabOffsetX, int grabOffsetY) {
@@ -99,9 +100,16 @@ public final class DragState {
 		return screenY;
 	}
 
+	public double scale() { return scale; }
+
 	public void moveTo(double mouseX, double mouseY) {
-		this.screenX = (int) Math.round(mouseX) - grabOffsetX;
-		this.screenY = (int) Math.round(mouseY) - grabOffsetY;
+		moveTo(mouseX, mouseY, scale);
+	}
+
+	public void moveTo(double mouseX, double mouseY, double scale) {
+		this.scale = scale;
+		this.screenX = (int) Math.round(mouseX - grabOffsetX * scale);
+		this.screenY = (int) Math.round(mouseY - grabOffsetY * scale);
 	}
 
 	/** Puts the blocks back where they were picked up. */

@@ -17,8 +17,8 @@ import java.util.Locale;
 /** Searchable workbench library. All text uses the screen's Minecraft font. */
 public final class PaletteWidget {
 	private static final int INSET = 8;
-	private static final int CHIP_HEIGHT = 18;
-	private static final int CHIP_GAP = 4;
+	private static final int PICKER_HEIGHT = 20;
+	private static final int OPTION_HEIGHT = 18;
 	private static final int ENTRY_GAP = 10;
 	private static final BlockCategory[] CATEGORIES = BlockCategory.values();
 	private final Font font;
@@ -30,6 +30,8 @@ public final class PaletteWidget {
 	private int width;
 	private int height;
 	private BlockCategory category;
+	private boolean categoryMenuOpen;
+	private int firstOption;
 	private boolean layoutDirty = true;
 	private int contentHeight;
 	private int appliedScroll;
@@ -56,7 +58,8 @@ public final class PaletteWidget {
 		this.y = y;
 		this.width = width;
 		this.height = height;
-		searchField.setPosition(x + INSET + 5, y + 29);
+		categoryMenuOpen = false;
+		searchField.setPosition(x + INSET + 5, y + INSET + 6);
 		searchField.setWidth(Math.max(1, width - INSET * 2 - 10));
 		searchField.setHeight(font.lineHeight + 2);
 	}
@@ -65,15 +68,20 @@ public final class PaletteWidget {
 		return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
 	}
 
-	private int columns() { return width >= 180 ? (height < 240 ? 4 : 3) : 2; }
-	private int chipWidth() { return Math.max(1, (width - INSET * 2 - CHIP_GAP * (columns() - 1)) / columns()); }
-	private int chipX(int index) { return x + INSET + index % columns() * (chipWidth() + CHIP_GAP); }
-	private int chipY(int index) { return y + 48 + index / columns() * (CHIP_HEIGHT + CHIP_GAP); }
+	private int pickerY() { return y + INSET + 26; }
+	private String categoryLabel(int index) { return index == 0 ? "All blocks" : CATEGORIES[index - 1].displayName(); }
+	public boolean categoryMenuOpen() { return categoryMenuOpen; }
+	public void closeCategoryMenu() { categoryMenuOpen = false; }
 
 	private int shelfTop() {
-		int rows = (CATEGORIES.length + 1 + columns() - 1) / columns();
-		return y + 48 + rows * (CHIP_HEIGHT + CHIP_GAP) + 22;
+		return pickerY() + PICKER_HEIGHT + 8;
 	}
+
+	private int menuRows() {
+		return Math.clamp((y + height - INSET - menuTop() - 2) / OPTION_HEIGHT, 0, CATEGORIES.length + 1);
+	}
+
+	private int menuTop() { return pickerY() + PICKER_HEIGHT; }
 
 	private int shelfHeight() { return Math.max(0, y + height - INSET - shelfTop()); }
 
@@ -113,27 +121,17 @@ public final class PaletteWidget {
 		graphics.fill(x, y, x + width, y + height, Theme.LIBRARY_BACKGROUND);
 		graphics.outline(x, y, width, height, Theme.WORKSPACE_BORDER);
 		graphics.enableScissor(x + 1, y + 1, x + width - 1, y + height - 1);
-		graphics.text(font, "BLOCK LIBRARY", x + INSET, y + 9, Theme.WORKSPACE_TEXT);
-		graphics.fill(x + INSET, y + 23, x + width - INSET, y + 43, Theme.PARAM_FILL);
-		graphics.outline(x + INSET, y + 23, width - INSET * 2, 20,
+		graphics.fill(x + INSET, y + INSET, x + width - INSET, y + INSET + 20, Theme.PARAM_FILL);
+		graphics.outline(x + INSET, y + INSET, width - INSET * 2, 20,
 				searchField.isFocused() ? Theme.PARAM_FOCUSED : Theme.WORKSPACE_BORDER);
-		for (int i = 0; i <= CATEGORIES.length; i++) {
-			BlockCategory chipCategory = i == 0 ? null : CATEGORIES[i - 1];
-			int cx = chipX(i);
-			int cy = chipY(i);
-			boolean selected = category == chipCategory;
-			boolean hovered = mouseX >= cx && mouseX < cx + chipWidth() && mouseY >= cy && mouseY < cy + CHIP_HEIGHT;
-			int fill = chipCategory == null ? Theme.WORKSPACE_BORDER : chipCategory.color();
-			int accent = chipCategory == null ? Theme.DROP_INDICATOR : chipCategory.accent();
-			graphics.fill(cx, cy, cx + chipWidth(), cy + CHIP_HEIGHT, fill);
-			if (selected || hovered) graphics.outline(cx, cy, chipWidth(), CHIP_HEIGHT,
-					selected ? accent : Theme.WORKSPACE_TEXT);
-			String label = chipCategory == null ? "All" : chipCategory.displayName();
-			graphics.centeredText(font, font.plainSubstrByWidth(label, Math.max(1, chipWidth() - 8)),
-					cx + chipWidth() / 2, BlockLayout.textTop(cy, CHIP_HEIGHT, font), Theme.WORKSPACE_TEXT);
-		}
-		graphics.text(font, category == null ? "All blocks" : category.displayName(),
-				x + INSET, shelfTop() - 15, Theme.WORKSPACE_MUTED);
+		graphics.fill(x + INSET, pickerY(), x + width - INSET, pickerY() + PICKER_HEIGHT, Theme.PARAM_FILL);
+		graphics.outline(x + INSET, pickerY(), width - INSET * 2, PICKER_HEIGHT,
+				categoryMenuOpen ? Theme.DROP_INDICATOR : Theme.WORKSPACE_BORDER);
+		int selectedIndex = category == null ? 0 : category.ordinal() + 1;
+		graphics.text(font, font.plainSubstrByWidth(categoryLabel(selectedIndex), Math.max(1, width - INSET * 2 - 24)),
+				x + INSET + 5, BlockLayout.textTop(pickerY(), PICKER_HEIGHT, font), Theme.WORKSPACE_TEXT);
+		graphics.text(font, categoryMenuOpen ? "^" : "v", x + width - INSET - 12,
+				BlockLayout.textTop(pickerY(), PICKER_HEIGHT, font), Theme.WORKSPACE_MUTED);
 		graphics.fill(x + INSET, shelfTop() - 4, x + width - INSET, shelfTop() - 3, Theme.WORKSPACE_BORDER);
 		graphics.disableScissor();
 		if (shelfHeight() <= 0) return;
@@ -141,7 +139,7 @@ public final class PaletteWidget {
 		for (Entry entry : entries) {
 			BlockLayout.Node node = entry.layout().nodes.getFirst();
 			if (node.y + entry.height() <= shelfTop() || node.y >= y + height - INSET) continue;
-			BlockLayout.Node hovered = overShelf(mouseX, mouseY)
+			BlockLayout.Node hovered = !categoryMenuOpen && overShelf(mouseX, mouseY)
 					? BlockLayout.hitTest(entry.layout().nodes, mouseX, mouseY) : null;
 			BlockRenderer.drawStack(graphics, font, entry.layout().nodes, hovered, null);
 		}
@@ -150,22 +148,62 @@ public final class PaletteWidget {
 		scrollbar.render(graphics);
 	}
 
+	/** Render after screen widgets so the dropdown covers the shelf below it. */
+	public void renderCategoryMenu(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+		if (!categoryMenuOpen) return;
+		int rows = menuRows();
+		graphics.nextStratum();
+		graphics.fill(x + INSET, menuTop(), x + width - INSET, menuTop() + rows * OPTION_HEIGHT + 2,
+				Theme.LIBRARY_BACKGROUND);
+		graphics.outline(x + INSET, menuTop(), width - INSET * 2, rows * OPTION_HEIGHT + 2, Theme.WORKSPACE_BORDER);
+		for (int row = 0; row < rows; row++) {
+			int index = firstOption + row;
+			int top = menuTop() + 1 + row * OPTION_HEIGHT;
+			boolean hovered = mouseX >= x + INSET && mouseX < x + width - INSET
+					&& mouseY >= top && mouseY < top + OPTION_HEIGHT;
+			if (hovered) graphics.fill(x + INSET + 1, top, x + width - INSET - 1, top + OPTION_HEIGHT, Theme.WORKSPACE_BORDER);
+			BlockCategory option = index == 0 ? null : CATEGORIES[index - 1];
+			int accent = option == null ? Theme.DROP_INDICATOR : option.accent();
+			graphics.fill(x + INSET + 5, top + 6, x + INSET + 8, top + 11, accent);
+			graphics.text(font, font.plainSubstrByWidth(categoryLabel(index), Math.max(1, width - INSET * 2 - 20)),
+					x + INSET + 13, BlockLayout.textTop(top, OPTION_HEIGHT, font), category == option ? accent : Theme.WORKSPACE_TEXT);
+		}
+		if (rows < CATEGORIES.length + 1 && rows > 0) {
+			int trackHeight = rows * OPTION_HEIGHT - 4;
+			int thumbHeight = Math.max(8, trackHeight * rows / (CATEGORIES.length + 1));
+			int thumbTop = menuTop() + 3 + firstOption * (trackHeight - thumbHeight) / (CATEGORIES.length + 1 - rows);
+			graphics.fill(x + width - INSET - 3, menuTop() + 3, x + width - INSET - 1,
+					menuTop() + 3 + trackHeight, Theme.WORKSPACE_BORDER);
+			graphics.fill(x + width - INSET - 3, thumbTop, x + width - INSET - 1,
+					thumbTop + thumbHeight, Theme.WORKSPACE_MUTED);
+		}
+	}
+
 	private boolean overShelf(double mouseX, double mouseY) {
 		return mouseX >= x + INSET && mouseX < x + width - INSET - Panels.SCROLLBAR_WIDTH
 				&& mouseY >= shelfTop() && mouseY < y + height - INSET;
 	}
 
 	public boolean mouseClicked(MouseButtonEvent event) {
-		if (!contains(event.x(), event.y())) return false;
-		rebuild();
-		for (int i = 0; i <= CATEGORIES.length; i++) {
-			if (event.x() >= chipX(i) && event.x() < chipX(i) + chipWidth()
-					&& event.y() >= chipY(i) && event.y() < chipY(i) + CHIP_HEIGHT) {
-				category = i == 0 ? null : CATEGORIES[i - 1];
+		if (categoryMenuOpen) {
+			int row = ((int) event.y() - menuTop() - 1) / OPTION_HEIGHT;
+			if (event.x() >= x + INSET && event.x() < x + width - INSET
+					&& event.y() >= menuTop() + 1 && row >= 0 && row < menuRows()) {
+				int index = firstOption + row;
+				category = index == 0 ? null : CATEGORIES[index - 1];
 				scrollbar.reset();
 				layoutDirty = true;
-				return true;
 			}
+			closeCategoryMenu();
+			return true;
+		}
+		if (!contains(event.x(), event.y())) return false;
+		rebuild();
+		if (event.x() >= x + INSET && event.x() < x + width - INSET
+				&& event.y() >= pickerY() && event.y() < pickerY() + PICKER_HEIGHT && menuRows() > 0) {
+			categoryMenuOpen = true;
+			firstOption = Math.clamp(category == null ? 0 : category.ordinal() + 1, 0, CATEGORIES.length + 1 - menuRows());
+			return true;
 		}
 		return event.y() < shelfTop() || scrollbar.mouseClicked(event.x(), event.y());
 	}
@@ -188,6 +226,10 @@ public final class PaletteWidget {
 	public void mouseDragged(double mouseY) { scrollbar.mouseDragged(mouseY); }
 	public void mouseReleased() { scrollbar.mouseReleased(); }
 	public boolean mouseScrolled(double amount) {
+		if (categoryMenuOpen) {
+			firstOption = Math.clamp(firstOption - (int) Math.signum(amount), 0, CATEGORIES.length + 1 - menuRows());
+			return true;
+		}
 		rebuild();
 		scrollbar.scrollBy(amount, 24);
 		return true;

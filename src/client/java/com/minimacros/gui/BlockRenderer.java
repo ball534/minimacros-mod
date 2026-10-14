@@ -75,6 +75,16 @@ public final class BlockRenderer {
 			graphics.fill(node.x + BlockLayout.NOTCH_X, node.y,
 					node.x + BlockLayout.NOTCH_X + BlockLayout.NOTCH_WIDTH,
 					node.y + BlockLayout.NOTCH_HEIGHT, border);
+			// Restore the preceding block's tongue inside this block's socket.
+			if (node.parentList != null && node.indexInParent > 0) {
+				BlockType previous = node.parentList.get(node.indexInParent - 1).type();
+				if (previous != null && !previous.isReporter()) {
+					int left = node.x + BlockLayout.NOTCH_X;
+					int right = left + BlockLayout.NOTCH_WIDTH;
+					graphics.fill(left + 1, node.y, right - 1, node.y + BlockLayout.NOTCH_HEIGHT - 1,
+							previous.category().color());
+				}
+			}
 			// A subtle top bevel and a stepped bottom connector, within the
 			// measured silhouette so stacking and hit-testing stay aligned.
 			int notchLeft = node.x + BlockLayout.NOTCH_X;
@@ -111,6 +121,15 @@ public final class BlockRenderer {
 
 		for (BlockLayout.Branch branch : node.branches) {
 			drawStack(graphics, font, branch.children(), hovered, edit);
+			if (!branch.children().isEmpty()) {
+				BlockLayout.Node first = branch.children().getFirst();
+				BlockType childType = first.block.type();
+				if (childType != null && !childType.isReporter()) {
+					int left = first.x + BlockLayout.NOTCH_X;
+					graphics.fill(left + 1, first.y, left + BlockLayout.NOTCH_WIDTH - 1,
+							first.y + BlockLayout.NOTCH_HEIGHT - 1, color);
+				}
+			}
 		}
 	}
 
@@ -246,13 +265,13 @@ public final class BlockRenderer {
 		int armRight = node.x + BlockLayout.BRANCH_INDENT;
 
 		List<int[]> bands = new ArrayList<>();
-		bands.add(new int[]{node.y, node.y + node.headerHeight, fullRight});
+		bands.add(new int[]{node.y, node.y + node.headerHeight - BlockLayout.NOTCH_HEIGHT, fullRight});
 		for (int i = 0; i < node.branches.size(); i++) {
 			BlockLayout.Branch branch = node.branches.get(i);
 			bands.add(new int[]{branch.y(), branch.y() + branch.height(), armRight});
 			if (i < node.dividerYs.size()) {
 				int dividerY = node.dividerYs.get(i);
-				bands.add(new int[]{dividerY, dividerY + BlockLayout.DIVIDER_HEIGHT, fullRight});
+				bands.add(new int[]{dividerY, dividerY + BlockLayout.DIVIDER_HEIGHT - BlockLayout.NOTCH_HEIGHT, fullRight});
 			}
 		}
 		bands.add(new int[]{node.footerY, node.footerY + BlockLayout.FOOTER_HEIGHT - BlockLayout.NOTCH_HEIGHT, fullRight});

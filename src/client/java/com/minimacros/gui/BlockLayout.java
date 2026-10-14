@@ -37,6 +37,8 @@ public final class BlockLayout {
 	public static final int NOTCH_X = 8;
 	public static final int NOTCH_WIDTH = 10;
 	public static final int NOTCH_HEIGHT = 3;
+	/** Share the connector and one border pixel at each join. */
+	public static final int STACK_OVERLAP = NOTCH_HEIGHT + 1;
 	/** Vertical breathing room above and below a reporter nested in a slot. */
 	private static final int SLOT_PADDING = 3;
 	/** How far a boolean hexagon's point juts out past its contents. */
@@ -111,7 +113,7 @@ public final class BlockLayout {
 		}
 
 		public double distanceTo(int px, int py) {
-			double dx = px - x;
+			double dx = Math.max(x - px, Math.max(0, px - (x + width)));
 			double dy = py - y;
 			return Math.sqrt(dx * dx + dy * dy);
 		}
@@ -263,13 +265,14 @@ public final class BlockLayout {
 		int cursorY = y;
 
 		for (int i = 0; i < list.size(); i++) {
-			out.targets.add(new DropTarget(list, i, x, cursorY, MIN_HEADER_WIDTH));
 			Node node = layoutBlock(list.get(i), list, i, null, null, x, cursorY, font, out);
+			out.targets.add(new DropTarget(list, i, x, cursorY, node.headerWidth));
 			nodes.add(node);
-			cursorY += node.height;
+			cursorY += stackAdvance(node);
 		}
 
-		out.targets.add(new DropTarget(list, list.size(), x, cursorY, MIN_HEADER_WIDTH));
+		out.targets.add(new DropTarget(list, list.size(), x, cursorY,
+				nodes.isEmpty() ? MIN_HEADER_WIDTH : nodes.getLast().headerWidth));
 		return nodes;
 	}
 
@@ -292,18 +295,18 @@ public final class BlockLayout {
 			return node;
 		}
 
-		int cursorY = y + node.headerHeight;
+		int cursorY = y + node.headerHeight - STACK_OVERLAP;
 		for (int branchIndex = 0; branchIndex < type.branchCount(); branchIndex++) {
 			List<BlockInstance> childList = block.branch(branchIndex);
 			List<Node> children = layoutStack(childList, x + BRANCH_INDENT, cursorY, font, out);
-			int branchHeight = Math.max(BRANCH_MIN_HEIGHT, stackHeight(children));
+			int branchHeight = children.isEmpty() ? BRANCH_MIN_HEIGHT : stackHeight(children);
 
 			node.branches.add(new Branch(cursorY, branchHeight, children));
 			cursorY += branchHeight;
 
 			if (branchIndex < type.branchCount() - 1) {
 				node.dividerYs.add(cursorY);
-				cursorY += DIVIDER_HEIGHT;
+				cursorY += DIVIDER_HEIGHT - STACK_OVERLAP;
 			}
 		}
 
@@ -418,9 +421,14 @@ public final class BlockLayout {
 	public static int stackHeight(List<Node> nodes) {
 		int total = 0;
 		for (Node node : nodes) {
-			total += node.height;
+			total += stackAdvance(node);
 		}
 		return total;
+	}
+
+	private static int stackAdvance(Node node) {
+		BlockType type = node.block.type();
+		return node.height - (type != null && !type.isReporter() ? STACK_OVERLAP : 0);
 	}
 
 	/**

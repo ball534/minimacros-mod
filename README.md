@@ -18,6 +18,9 @@ Open the editor from **Mods → Mini Macros → Config**, or bind a key to
 *Open Mini Macros* under **Options → Controls**.
 
 - Search or filter the block library on the right, then drag blocks onto the canvas.
+- Pick a block category from the dropdown below the library search box.
+- Scroll over the canvas to zoom in or out around the pointer (50%-200%). Drag
+  empty canvas space to pan; scrolling over the library still scrolls its blocks.
 - Blocks snap to the top or bottom of a stack; dropped in open space they start
   a stack of their own.
 - Drop reporters (ovals) and conditions (hexagons) into the matching holes.

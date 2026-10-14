@@ -10,8 +10,13 @@ All notable changes to Mini Macros are recorded here. Versions follow
 - Restyled only the block library, blocks, and canvas with muted material colours,
   pixel bevels, recessed slots, and a subtle grid. The rest of the editor retains
   its original design, and all text uses Minecraft's font.
-- Added library search and visible category filters. Cached library layouts and
+- Added library search and a category dropdown. Cached library layouts and
   skipped drawing offscreen blocks instead of rebuilding them every frame.
+- Removed the library title.
+- The canvas mouse wheel now zooms around the cursor. Dragging, editing, and
+  snapping follow the zoom level; empty-space dragging still pans the canvas.
+- Connected blocks now overlap their connectors and share borders, including
+  inside branches. Snapping uses the full join width and a larger capture area.
 - Removed unused category-menu constants and execution-context accessors.
 - Reused keybind tracking collections and replaced an unnecessary concurrent
   collection on the client thread.

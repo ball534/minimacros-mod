@@ -85,7 +85,8 @@ sourceSets {
 
 [
 	macroDataRegression: 'com.minimacros.macro.MacroDataRegressionTest',
-	runtimeRegression: 'com.minimacros.runtime.RuntimeRegressionTest'
+	runtimeRegression: 'com.minimacros.runtime.RuntimeRegressionTest',
+	canvasRegression: 'com.minimacros.gui.CanvasRegressionTest'
 ].each { taskName, testClass ->
 	tasks.register(taskName, JavaExec) {
 		dependsOn tasks.named('regressionTestClasses')
@@ -97,7 +98,7 @@ sourceSets {
 }
 
 tasks.named('check') {
-	dependsOn tasks.named('macroDataRegression'), tasks.named('runtimeRegression')
+	dependsOn tasks.named('macroDataRegression'), tasks.named('runtimeRegression'), tasks.named('canvasRegression')
 }
 
 jar {

@@ -34,7 +34,7 @@ public final class ScriptCanvasWidget {
 	 * becomes its own stack where it was dropped — without a limit a single block
 	 * dropped anywhere on an empty canvas would fly off to join nothing.
 	 */
-	private static final double STACK_SNAP_RADIUS = 28;
+	private static final double STACK_SNAP_RADIUS = 36;
 
 	private final Font font;
 	private final Consumer<DragState> dragStarter;
@@ -43,8 +43,9 @@ public final class ScriptCanvasWidget {
 	private int y;
 	private int width;
 	private int height;
-	private int scrollX;
-	private int scrollY;
+	private double scrollX;
+	private double scrollY;
+	private double zoom = 1.0;
 
 	private List<ScriptStack> stacks = new ArrayList<>();
 	private BlockLayout.Layout layout;
@@ -72,6 +73,7 @@ public final class ScriptCanvasWidget {
 		this.stacks = stacks;
 		this.scrollX = 0;
 		this.scrollY = 0;
+		this.zoom = 1.0;
 	}
 
 	public List<ScriptStack> stacks() {
@@ -85,12 +87,14 @@ public final class ScriptCanvasWidget {
 	// --- coordinate helpers ---------------------------------------------
 
 	private int toContentX(double screenX) {
-		return (int) Math.round(screenX) - x + scrollX;
+		return (int) Math.round((screenX - x) / zoom + scrollX);
 	}
 
 	private int toContentY(double screenY) {
-		return (int) Math.round(screenY) - y + scrollY;
+		return (int) Math.round((screenY - y) / zoom + scrollY);
 	}
+
+	public double zoom() { return zoom; }
 
 	private void rebuild() {
 		// The open editor goes in so a field grows while it is being typed into
@@ -122,15 +126,18 @@ public final class ScriptCanvasWidget {
 		graphics.fill(x, y, x + width, y + height, Theme.WORKSPACE_BACKGROUND);
 
 		graphics.enableScissor(x, y, x + width, y + height);
-		// Anchor the grid to content coordinates so it follows canvas panning.
-		for (int gridY = y + Math.floorMod(12 - scrollY, 24); gridY < y + height; gridY += 24) {
-			for (int gridX = x + Math.floorMod(12 - scrollX, 24); gridX < x + width; gridX += 24) {
+		graphics.pose().pushMatrix();
+		graphics.pose().translate((float) x, (float) y);
+		graphics.pose().scale((float) zoom, (float) zoom);
+		graphics.pose().translate((float) -scrollX, (float) -scrollY);
+		// Grid and blocks share the transform so both follow panning and zoom.
+		int firstGridX = (int) Math.floor((scrollX - 12) / 24) * 24 + 12;
+		int firstGridY = (int) Math.floor((scrollY - 12) / 24) * 24 + 12;
+		for (int gridY = firstGridY; gridY < scrollY + height / zoom; gridY += 24) {
+			for (int gridX = firstGridX; gridX < scrollX + width / zoom; gridX += 24) {
 				graphics.fill(gridX, gridY, gridX + 1, gridY + 1, Theme.WORKSPACE_GRID);
 			}
 		}
-		graphics.pose().pushMatrix();
-		graphics.pose().translate((float) (x - scrollX), (float) (y - scrollY));
-
 		BlockLayout.Node hovered = contains(mouseX, mouseY) && drag == null
 				? BlockLayout.hitTest(layout.nodes, toContentX(mouseX), toContentY(mouseY))
 				: null;
@@ -148,7 +155,7 @@ public final class ScriptCanvasWidget {
 				// join a stack, so offering the gap would be a false promise.
 				// Nothing shown when nothing is in range either: the block is about
 				// to become a stack of its own exactly where the cursor is.
-				BlockLayout.DropTarget target = nearestTarget(aimX, aimY);
+				BlockLayout.DropTarget target = nearestTarget(drag, aimX);
 				if (target != null) {
 					graphics.fill(target.x, target.y - 1, target.x + Math.max(target.width, 60),
 							target.y + 3, Theme.DROP_INDICATOR);
@@ -234,8 +241,8 @@ public final class ScriptCanvasWidget {
 	 * stack brings everything below it with it.
 	 */
 	private void startDrag(BlockLayout.Node node, MouseButtonEvent event) {
-		int grabX = (int) Math.round(event.x()) - (x + node.x - scrollX);
-		int grabY = (int) Math.round(event.y()) - (y + node.y - scrollY);
+		int grabX = toContentX(event.x()) - node.x;
+		int grabY = toContentY(event.y()) - node.y;
 
 		if (node.isNestedInSlot()) {
 			node.slotOwner.removeInput(node.slotParamId);
@@ -278,8 +285,8 @@ public final class ScriptCanvasWidget {
 		if (!panning) {
 			return;
 		}
-		scrollX -= (int) Math.round(mouseX - lastPanX);
-		scrollY -= (int) Math.round(mouseY - lastPanY);
+		scrollX -= (mouseX - lastPanX) / zoom;
+		scrollY -= (mouseY - lastPanY) / zoom;
 		lastPanX = mouseX;
 		lastPanY = mouseY;
 	}
@@ -288,8 +295,13 @@ public final class ScriptCanvasWidget {
 		panning = false;
 	}
 
-	public boolean mouseScrolled(double amount) {
-		scrollY -= (int) Math.round(amount * 16);
+	public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+		if (!Double.isFinite(amount) || amount == 0) return true;
+		double nextZoom = Math.clamp(zoom * Math.pow(1.1, amount), 0.5, 2.0);
+		// Keep the content under the cursor stationary while its scale changes.
+		scrollX += (mouseX - x) / zoom - (mouseX - x) / nextZoom;
+		scrollY += (mouseY - y) / zoom - (mouseY - y) / nextZoom;
+		zoom = nextZoom;
 		return true;
 	}
 
@@ -297,9 +309,8 @@ public final class ScriptCanvasWidget {
 	 * Drops a dragged stack: into a slot, onto the end of a stack it was let go
 	 * near, or — failing both — down as a new stack of its own at the cursor.
 	 *
-	 * <p>What it snaps onto is measured from the cursor, but a stack that snaps
-	 * onto nothing is still set down where its ghost was drawn — the cursor
-	 * decides what the drop means, and the ghost shows where it lands.
+	 * <p>Reporters follow the cursor into slots; action stacks align their header
+	 * with a join. A stack that misses every join lands where its ghost was drawn.
 	 */
 	public void drop(DragState drag, double mouseX, double mouseY) {
 		rebuild();
@@ -322,11 +333,11 @@ public final class ScriptCanvasWidget {
 			return;
 		}
 
-		BlockLayout.DropTarget target = nearestTarget(aimX, aimY);
+		BlockLayout.DropTarget target = nearestTarget(drag, aimX);
 		if (target != null) {
 			target.list.addAll(Math.min(target.index, target.list.size()), drag.blocks());
 		} else {
-			stacks.add(new ScriptStack(drag.screenX() - x + scrollX, drag.screenY() - y + scrollY,
+			stacks.add(new ScriptStack(toContentX(drag.screenX()), toContentY(drag.screenY()),
 					drag.blocks()));
 		}
 		pruneEmptyStacks();
@@ -336,20 +347,21 @@ public final class ScriptCanvasWidget {
 	 * The join a dragged stack would snap onto, or null when it is not close
 	 * enough to any of them and should stand on its own instead.
 	 *
-	 * <p>Measured from the cursor rather than from the dragged stack's own corner.
-	 * Grabbing a wide block by its right-hand end put that corner most of a block
-	 * away from the hand holding it, so a join would light up while the cursor was
-	 * still nowhere near it.
+	 * <p>The dragged header's top edge finds a join across the target's full width.
+	 * Either the cursor or the header's left edge can line up horizontally, so
+	 * wide blocks remain easy to connect regardless of where they were grabbed.
 	 */
-	private BlockLayout.DropTarget nearestTarget(int contentX, int contentY) {
+	private BlockLayout.DropTarget nearestTarget(DragState drag, int contentX) {
 		if (layout == null || layout.targets.isEmpty()) {
 			return null;
 		}
 
 		BlockLayout.DropTarget best = null;
-		double bestDistance = STACK_SNAP_RADIUS;
+		double bestDistance = STACK_SNAP_RADIUS / zoom;
+		int headerX = toContentX(drag.screenX());
+		int headerY = toContentY(drag.screenY());
 		for (BlockLayout.DropTarget target : layout.targets) {
-			double distance = target.distanceTo(contentX, contentY);
+			double distance = Math.min(target.distanceTo(contentX, headerY), target.distanceTo(headerX, headerY));
 			if (distance < bestDistance) {
 				bestDistance = distance;
 				best = target;
@@ -369,7 +381,7 @@ public final class ScriptCanvasWidget {
 		}
 
 		BlockLayout.SlotTarget best = null;
-		double bestDistance = SLOT_SNAP_RADIUS;
+		double bestDistance = SLOT_SNAP_RADIUS / zoom;
 		for (BlockLayout.SlotTarget slot : layout.slotTargets) {
 			// Never let a reporter be dropped into a slot on itself.
 			if (contains(drag.blocks().getFirst(), slot.owner)) {

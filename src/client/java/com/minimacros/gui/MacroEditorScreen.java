@@ -196,6 +196,7 @@ public class MacroEditorScreen extends Screen {
 		palette.searchField().visible = paletteOpen
 				&& palette.searchField().getY() + palette.searchField().getHeight() < contentBottom;
 		palette.searchField().active = palette.searchField().visible;
+		if (!paletteOpen) palette.closeCategoryMenu();
 		if (!palette.searchField().visible && getFocused() == palette.searchField()) setFocused(null);
 
 		paletteToggle.setPosition(splitterX, contentTop);
@@ -324,7 +325,11 @@ public class MacroEditorScreen extends Screen {
 
 	private void beginDrag(DragState state) {
 		this.drag = state;
-		this.drag.moveTo(lastMouseX, lastMouseY);
+		moveDrag(lastMouseX, lastMouseY);
+	}
+
+	private void moveDrag(double mouseX, double mouseY) {
+		drag.moveTo(mouseX, mouseY, canvas.contains(mouseX, mouseY) ? canvas.zoom() : 1.0);
 	}
 
 	private double lastMouseX;
@@ -336,6 +341,7 @@ public class MacroEditorScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		lastMouseX = mouseX;
 		lastMouseY = mouseY;
+		if (drag != null) moveDrag(mouseX, mouseY);
 
 		graphics.centeredText(this.font, getTitle(), this.width / 2,
 				(HEADER_HEIGHT - this.font.lineHeight) / 2, Theme.TEXT);
@@ -349,6 +355,7 @@ public class MacroEditorScreen extends Screen {
 		}
 
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
+		if (paletteOpen) palette.renderCategoryMenu(graphics, mouseX, mouseY);
 
 		renderDragGhost(graphics);
 	}
@@ -358,17 +365,26 @@ public class MacroEditorScreen extends Screen {
 			return;
 		}
 		graphics.nextStratum();
-		BlockLayout.Layout ghost = BlockLayout.compute(drag.blocks(), drag.screenX(), drag.screenY(), this.font);
+		moveDrag(lastMouseX, lastMouseY);
+		graphics.pose().pushMatrix();
+		graphics.pose().translate((float) drag.screenX(), (float) drag.screenY());
+		graphics.pose().scale((float) drag.scale(), (float) drag.scale());
+		BlockLayout.Layout ghost = BlockLayout.compute(drag.blocks(), 0, 0, this.font);
 		BlockRenderer.drawStack(graphics, this.font, ghost.nodes, null, null);
+		graphics.pose().popMatrix();
 	}
 
 	// --- input ----------------------------------------------------------
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+		lastMouseX = event.x();
+		lastMouseY = event.y();
 		if (drag != null) {
 			return true;
 		}
+
+		if (paletteOpen && palette.categoryMenuOpen()) return palette.mouseClicked(event);
 
 		if (super.mouseClicked(event, doubleClick)) {
 			canvas.commitEdit();
@@ -409,7 +425,7 @@ public class MacroEditorScreen extends Screen {
 		lastMouseY = event.y();
 
 		if (drag != null) {
-			drag.moveTo(event.x(), event.y());
+			moveDrag(event.x(), event.y());
 			return true;
 		}
 		// A scrollbar keeps the drag once it has it, so the thumb goes on following
@@ -445,6 +461,7 @@ public class MacroEditorScreen extends Screen {
 
 	/** Palette means discard, canvas means insert, anywhere else means put it back. */
 	private void dropDraggedStack(MouseButtonEvent event) {
+		moveDrag(event.x(), event.y());
 		if (paletteOpen && palette.contains(event.x(), event.y())) {
 			// Dragged onto the store, so it is thrown away — which can leave the
 			// stack it came out of with nothing in it.
@@ -468,13 +485,17 @@ public class MacroEditorScreen extends Screen {
 			return macroList.mouseScrolled(scrollY);
 		}
 		if (canvas.contains(mouseX, mouseY)) {
-			return canvas.mouseScrolled(scrollY);
+			return canvas.mouseScrolled(mouseX, mouseY, scrollY);
 		}
 		return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
 	}
 
 	@Override
 	public boolean keyPressed(KeyEvent event) {
+		if (paletteOpen && palette.categoryMenuOpen() && event.key() == InputConstants.KEY_ESCAPE) {
+			palette.closeCategoryMenu();
+			return true;
+		}
 		if (capturingKeybind) {
 			captureKeybind(event);
 			return true;
