@@ -37,6 +37,8 @@ public final class BlockRegistry {
 	/** Keyboard and mouse both go through these; see {@code InputSimulator.resolveKey}. */
 	public static final String BUTTON_DOWN = "input.button_down";
 	public static final String BUTTON_UP = "input.button_up";
+	/** Keep the saved block id so existing echo blocks acquire the new label. */
+	public static final String TYPE_TEXT = "input.echo";
 
 	private static final Map<String, BlockType> TYPES = new LinkedHashMap<>();
 	/**
@@ -147,10 +149,10 @@ public final class BlockRegistry {
 						ctx.resolveInt(block, "duration", 1)))
 				.build());
 
-		register(BlockType.builder("input.echo", BlockCategory.INPUT, "echo %s")
+		register(BlockType.builder(TYPE_TEXT, BlockCategory.INPUT, "type text %s")
 				.params(ParamSpec.slot("text"))
 				.action((block, ctx) -> {
-					ctx.echo(ctx.text(ctx.resolve(block, "text")));
+					ctx.typeText(ctx.textArgument(block, "text"));
 					return 0;
 				})
 				.build());

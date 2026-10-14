@@ -84,6 +84,24 @@ Panic stops running stacks. Fresh manual input can start them again; automatic
 enabled/periodic listeners require disabling and re-enabling the macro to rearm.
 Existing saved keybinds are migrated into restart event blocks on their stacks.
 
+## Typing text
+
+The **type text** block (formerly **echo**) opens chat when no screen is open,
+then types into its input. If a screen is already open, it types into that
+screen's focused editable field instead. Text is left unsent; submitting it
+requires an explicit Enter press. Existing echo blocks keep working with the
+new label.
+
+```text
+When [R] is pressed [run once]
+    type text [Hello!]
+```
+
+This opens chat with `Hello!` ready to send. There is no need to press the chat
+key or insert a delay first. Literal spaces are preserved, and variables and
+`${name}` interpolation still work. If the open screen does not accept text,
+the block shows a local actionbar message asking you to check the destination.
+
 ## Building
 
 ```

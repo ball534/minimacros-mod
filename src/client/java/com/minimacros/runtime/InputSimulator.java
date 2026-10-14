@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Delivers input through Minecraft's own systems. Nothing here touches the
@@ -189,12 +190,22 @@ public final class InputSimulator {
 		return new KeyEvent(scancode, SDLKeyboard.SDL_GetKeyFromScancode(scancode, (short) 0, false), 0);
 	}
 
-	/** Types text into an open screen, one character at a time and in order. */
-	public void typeIntoScreen(Screen screen, String text) {
-		if (text == null) {
-			return;
+	/** Resolve the destination before typing, including a synchronously opened chat. */
+	boolean typeText(Screen screen, String text, Supplier<Screen> openChat) {
+		if (text == null || text.isEmpty()) return true;
+		return typeIntoScreen(screen == null ? openChat.get() : screen, text);
+	}
+
+	/** Types through the screen's normal input handler; never sends an Enter key. */
+	public boolean typeIntoScreen(Screen screen, String text) {
+		if (screen == null || text == null || text.isEmpty()) return false;
+		boolean accepted = false;
+		for (int offset = 0; offset < text.length();) {
+			int codePoint = text.codePointAt(offset);
+			accepted |= screen.charTyped(new CharacterEvent(codePoint));
+			offset += Character.charCount(codePoint);
 		}
-		text.codePoints().forEach(codePoint -> screen.charTyped(new CharacterEvent(codePoint)));
+		return accepted;
 	}
 
 	// --- lifecycle ------------------------------------------------------

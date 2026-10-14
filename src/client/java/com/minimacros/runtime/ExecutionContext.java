@@ -5,6 +5,7 @@ import com.minimacros.macro.BlockInstance;
 import com.minimacros.macro.BlockType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 
@@ -112,6 +113,15 @@ public final class ExecutionContext {
 		return interpolate(Values.display(value));
 	}
 
+	/** Text entry preserves literal whitespace while still supporting variables. */
+	public String textArgument(BlockInstance owner, String paramId) {
+		String literal = owner.arg(paramId);
+		if (owner.input(paramId) != null || variables.containsKey(literal.trim())) {
+			return text(resolve(owner, paramId));
+		}
+		return interpolate(literal);
+	}
+
 	// --- variables ------------------------------------------------------
 
 	/** Declares a variable, starting at None. Re-declaring keeps the value. */
@@ -179,7 +189,7 @@ public final class ExecutionContext {
 	/**
 	 * Holds a key or mouse button down until {@link #keyUp}. With a screen open
 	 * the press goes to that screen instead, which is what makes the
-	 * "buttonDown t, echo, buttonDown enter" chat pattern work.
+	 * "buttonDown t, type text, buttonDown enter" chat pattern work.
 	 */
 	public void keyDown(String keyName) {
 		Screen screen = screen();
@@ -199,11 +209,15 @@ public final class ExecutionContext {
 		}
 	}
 
-	/** Types a string into the open screen, character by character. */
-	public void echo(String text) {
-		Screen screen = screen();
-		if (screen != null) {
-			input.typeIntoScreen(screen, text);
+	/** Opens chat if needed, then types without submitting the field. */
+	public void typeText(String text) {
+		if (!input.typeText(screen(), text, () -> {
+			Minecraft minecraft = Minecraft.getInstance();
+			if (minecraft.player == null || minecraft.level == null || minecraft.gui.overlay() != null) return null;
+			minecraft.gui.openChatScreen(ChatComponent.ChatMethod.MESSAGE);
+			return minecraft.gui.screen();
+		})) {
+			actionBar("Type text: the current screen did not accept the text.");
 		}
 	}
 

@@ -21,6 +21,9 @@ All notable changes to Mini Macros are recorded here. Versions follow
 - Added library search and a category dropdown. Cached library layouts and
   skipped drawing offscreen blocks instead of rebuilding them every frame.
 - Removed the library title.
+- Renamed echo to type text while retaining compatibility with existing blocks.
+  It now opens chat when no screen is open, preserving text that previously ran
+  before a simulated chat-key press was processed. Typing never submits text.
 - The canvas mouse wheel now zooms around the cursor. Dragging, editing, and
   snapping follow the zoom level; empty-space dragging still pans the canvas.
 - Connected blocks now overlap their connectors and share borders, including
@@ -44,6 +47,9 @@ All notable changes to Mini Macros are recorded here. Versions follow
   death, or opening the editor. Execution errors stop the affected macro.
 - Panic no longer allows immediate retriggering, and closing a screen with a
   key still held no longer starts a macro unexpectedly.
+- Text entry preserves literal spaces and reports when a screen does not accept
+  input. Added checks against Minecraft's text field for selection, Unicode,
+  focus, editability, and length limits.
 
 ### Validation
 
